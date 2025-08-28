@@ -11,9 +11,25 @@ from typing import Optional
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import ConfigurationManager
-from utils.logging_utils import setup_logging, get_logger
-from exceptions import AegisError
+try:
+    from config import ConfigurationManager
+    from utils.logging_utils import setup_logging, get_logger
+    from exceptions import AegisError
+except ImportError:
+    # Fallback for binary execution - try absolute imports
+    try:
+        from aegis.config import ConfigurationManager
+        from aegis.utils.logging_utils import setup_logging, get_logger
+        from aegis.exceptions import AegisError
+    except ImportError:
+        # Final fallback - add current directory to path
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        parent_dir = os.path.dirname(current_dir)
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
+        from config import ConfigurationManager
+        from utils.logging_utils import setup_logging, get_logger
+        from exceptions import AegisError
 
 
 @click.group()
@@ -113,7 +129,10 @@ def discover(
     logger.info("Starting cluster discovery...")
 
     try:
-        from discovery.discovery import ClusterDiscovery
+        try:
+            from discovery.discovery import ClusterDiscovery
+        except ImportError:
+            from aegis.discovery.discovery import ClusterDiscovery
         import time
 
         # Use timeout from config if not provided
@@ -218,7 +237,10 @@ def questionnaire(ctx: click.Context, input: str, batch: bool):
     logger.info("Starting questionnaire...")
 
     try:
-        from questionnaire import QuestionnaireRunner, YamlUpdater
+        try:
+            from questionnaire import QuestionnaireRunner, YamlUpdater
+        except ImportError:
+            from aegis.questionnaire import QuestionnaireRunner, YamlUpdater
         import time
 
         # Check if cluster discovery file exists
@@ -347,7 +369,10 @@ def catalog(
     logger.info("Starting catalog creation...")
 
     try:
-        from catalog import PolicyCatalogManager
+        try:
+            from catalog import PolicyCatalogManager
+        except ImportError:
+            from aegis.catalog import PolicyCatalogManager
         import time
 
         # Get configuration
@@ -526,13 +551,23 @@ def recommend(
         import json
         import time
         from datetime import datetime
-        from ai import BedrockClient, AIPolicySelector
-        from models import (
-            ClusterInfo,
-            GovernanceRequirements,
-            PolicyIndex,
-            PolicyCatalogEntry,
-        )
+
+        try:
+            from ai import BedrockClient, AIPolicySelector
+            from models import (
+                ClusterInfo,
+                GovernanceRequirements,
+                PolicyIndex,
+                PolicyCatalogEntry,
+            )
+        except ImportError:
+            from aegis.ai import BedrockClient, AIPolicySelector
+            from aegis.models import (
+                ClusterInfo,
+                GovernanceRequirements,
+                PolicyIndex,
+                PolicyCatalogEntry,
+            )
 
         def load_policy_index_from_file(index_path: str) -> PolicyIndex:
             """Load policy index from JSON file."""
@@ -710,7 +745,10 @@ def recommend(
         )
 
         # Use progress tracking for AI operations
-        from utils.progress_utils import ProgressTracker, progress_spinner
+        try:
+            from utils.progress_utils import ProgressTracker, progress_spinner
+        except ImportError:
+            from aegis.utils.progress_utils import ProgressTracker, progress_spinner
 
         if fix:
             click.echo(f"🔍 Advanced mode - policies will be validated and organized")
@@ -869,12 +907,20 @@ def recommend(
             click.echo(f"📋 Deployment guide: {deployment_guide}")
 
         # Use progress utilities for better formatting
-        from utils.progress_utils import (
-            show_operation_summary,
-            show_validation_summary,
-            show_file_operations,
-            show_next_steps,
-        )
+        try:
+            from utils.progress_utils import (
+                show_operation_summary,
+                show_validation_summary,
+                show_file_operations,
+                show_next_steps,
+            )
+        except ImportError:
+            from aegis.utils.progress_utils import (
+                show_operation_summary,
+                show_validation_summary,
+                show_file_operations,
+                show_next_steps,
+            )
 
         # Show recommendation summary
         recommendation_stats = {
@@ -974,7 +1020,10 @@ def recommend(
         click.echo(f"❌ Policy recommendation failed: {e}", err=True)
 
         # Show specific troubleshooting tips based on error type
-        from utils.progress_utils import show_troubleshooting_tips
+        try:
+            from utils.progress_utils import show_troubleshooting_tips
+        except ImportError:
+            from aegis.utils.progress_utils import show_troubleshooting_tips
 
         if "cluster-discovery.yaml" in str(e).lower():
             tips = [
@@ -1009,7 +1058,10 @@ def recommend(
         logger.error(f"Unexpected error during recommendation: {e}")
         click.echo(f"❌ Unexpected error during policy recommendation: {e}", err=True)
 
-        from utils.progress_utils import show_troubleshooting_tips
+        try:
+            from utils.progress_utils import show_troubleshooting_tips
+        except ImportError:
+            from aegis.utils.progress_utils import show_troubleshooting_tips
 
         tips = [
             f"Check the log file for more details: {ctx.obj['config'].get('logging', {}).get('file', './aegis.log')}",
@@ -1042,8 +1094,13 @@ def validate(
 
     try:
         import yaml
-        from ai import BedrockClient, KyvernoValidator
-        from models import RecommendedPolicy, PolicyCatalogEntry
+
+        try:
+            from ai import BedrockClient, KyvernoValidator
+            from models import RecommendedPolicy, PolicyCatalogEntry
+        except ImportError:
+            from aegis.ai import BedrockClient, KyvernoValidator
+            from aegis.models import RecommendedPolicy, PolicyCatalogEntry
 
         # Check if directory exists
         if not os.path.exists(directory):
@@ -1164,7 +1221,10 @@ def validate(
         # Run validation with progress indicator
         click.echo(f"\n🚀 Running Kyverno validation...")
 
-        from utils.progress_utils import progress_spinner
+        try:
+            from utils.progress_utils import progress_spinner
+        except ImportError:
+            from aegis.utils.progress_utils import progress_spinner
 
         with progress_spinner("Validating policies with Kyverno CLI"):
             validation_results, report_file = validator.validate_policies_with_report(
@@ -1604,7 +1664,10 @@ def health(ctx: click.Context):
     try:
         ai_config = config.get("ai", {})
         if ai_config.get("provider") == "aws-bedrock":
-            from ai import BedrockClient
+            try:
+                from ai import BedrockClient
+            except ImportError:
+                from aegis.ai import BedrockClient
 
             bedrock_client = BedrockClient(
                 region=ai_config.get("region", "us-east-1"),

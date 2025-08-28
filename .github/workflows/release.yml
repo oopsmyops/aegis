@@ -151,16 +151,15 @@ jobs:
         block_cipher = None
         
         a = Analysis(
-            ['cli/main.py'],
+            ['main.py'],
             pathex=[],
             binaries=[],
             datas=[('aegis-config.yaml', '.')],
             hiddenimports=[
-                'aegis.cli.main',
-                'aegis.discovery.discovery',
-                'aegis.questionnaire.questionnaire_runner',
-                'aegis.catalog.catalog_manager',
-                'aegis.ai.ai_policy_selector',
+                'config',
+                'models',
+                'interfaces',
+                'exceptions',
                 'boto3',
                 'botocore',
                 'kubernetes',
@@ -216,16 +215,15 @@ jobs:
         block_cipher = None
         
         a = Analysis(
-            ['cli/main.py'],
+            ['main.py'],
             pathex=[],
             binaries=[],
             datas=[('aegis-config.yaml', '.')],
             hiddenimports=[
-                'aegis.cli.main',
-                'aegis.discovery.discovery',
-                'aegis.questionnaire.questionnaire_runner',
-                'aegis.catalog.catalog_manager',
-                'aegis.ai.ai_policy_selector',
+                'config',
+                'models',
+                'interfaces',
+                'exceptions',
                 'boto3',
                 'botocore',
                 'kubernetes',

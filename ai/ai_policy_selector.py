@@ -74,11 +74,6 @@ class AIPolicySelector(AIPolicySelectorInterface):
             "phase_two_temperature", 0.1
         )
 
-        # Initialize policy customizer
-        from ai.policy_customizer import PolicyCustomizer
-
-        self.policy_customizer = PolicyCustomizer()
-
     def select_policies_two_phase(
         self,
         cluster_info: ClusterInfo,
@@ -250,98 +245,52 @@ class AIPolicySelector(AIPolicySelectorInterface):
     def customize_policies(
         self, policies: List[PolicyCatalogEntry], requirements: GovernanceRequirements
     ) -> List[RecommendedPolicy]:
-        """Customize policies based on governance requirements using PolicyCustomizer."""
+        """Copy policies as-is without modification, preserving their integrity."""
         recommended_policies = []
 
-        # Read all policy contents first
-        policy_contents = {}
+        self.logger.info(f"Copying {len(policies)} policies as-is without modification")
+
         for policy in policies:
             try:
+                # Read policy content as-is
                 policy_content = self._read_policy_content(policy)
-                policy_contents[policy.name] = policy_content
+
+                # Create recommended policy with original content (no modifications)
+                recommended_policy = RecommendedPolicy(
+                    original_policy=policy,
+                    customized_content=policy_content,
+                    category=policy.category,
+                    validation_status="pending",
+                    customizations_applied=["Policy copied as-is without modification"],
+                )
+
+                # Add test content if available
+                if policy.test_directory:
+                    try:
+                        test_content = self._read_test_content(policy)
+                        recommended_policy.test_content = test_content
+                    except Exception as test_error:
+                        self.logger.warning(
+                            f"Could not read test content for {policy.name}: {test_error}"
+                        )
+
+                recommended_policies.append(recommended_policy)
+                self.logger.debug(f"Successfully copied policy: {policy.name}")
+
             except Exception as e:
                 self.logger.error(f"Error reading policy {policy.name}: {e}")
-                policy_contents[policy.name] = f"# Error reading policy content: {e}"
-
-        # Use PolicyCustomizer for batch customization
-        try:
-            recommended_policies = self.policy_customizer.customize_policies_batch(
-                policies, requirements, policy_contents
-            )
-
-            # Add test content for policies that have test directories
-            for recommended_policy in recommended_policies:
-                if (
-                    recommended_policy.original_policy.test_directory
-                    and not recommended_policy.test_content
-                ):
-                    try:
-                        test_content = self._read_test_content(
-                            recommended_policy.original_policy
-                        )
-                        recommended_policy.test_content = test_content
-                    except Exception as e:
-                        self.logger.warning(
-                            f"Could not read test content for {recommended_policy.original_policy.name}: {e}"
-                        )
-
-            self.logger.info(
-                f"Customized {len(recommended_policies)} policies using PolicyCustomizer"
-            )
-
-        except Exception as e:
-            self.logger.error(f"Error in batch customization: {e}")
-            # Fallback to individual customization
-            for policy in policies:
-                try:
-                    policy_content = policy_contents.get(policy.name, "")
-                    if policy_content:
-                        recommended_policy = self.policy_customizer.customize_policy(
-                            policy, requirements, policy_content
-                        )
-
-                        # Add test content if available
-                        if (
-                            policy.test_directory
-                            and not recommended_policy.test_content
-                        ):
-                            try:
-                                test_content = self._read_test_content(policy)
-                                recommended_policy.test_content = test_content
-                            except Exception as test_error:
-                                self.logger.warning(
-                                    f"Could not read test content for {policy.name}: {test_error}"
-                                )
-
-                        recommended_policies.append(recommended_policy)
-                    else:
-                        # Create basic recommended policy if content reading failed
-                        recommended_policies.append(
-                            RecommendedPolicy(
-                                original_policy=policy,
-                                customized_content="# Error reading policy content",
-                                validation_status="error",
-                                customizations_applied=[
-                                    "Error reading original policy"
-                                ],
-                            )
-                        )
-
-                except Exception as policy_error:
-                    self.logger.error(
-                        f"Error customizing individual policy {policy.name}: {policy_error}"
+                # Create error policy entry
+                recommended_policies.append(
+                    RecommendedPolicy(
+                        original_policy=policy,
+                        customized_content=f"# Error reading policy content: {e}",
+                        category=policy.category,
+                        validation_status="error",
+                        customizations_applied=[f"Error reading policy: {e}"],
                     )
-                    recommended_policies.append(
-                        RecommendedPolicy(
-                            original_policy=policy,
-                            customized_content="# Error customizing policy",
-                            validation_status="error",
-                            customizations_applied=[
-                                f"Customization error: {policy_error}"
-                            ],
-                        )
-                    )
+                )
 
+        self.logger.info(f"Successfully copied {len(recommended_policies)} policies")
         return recommended_policies
 
     def validate_and_fix_policies(

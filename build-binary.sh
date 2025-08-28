@@ -100,18 +100,17 @@ pyinstaller --clean \
     --onefile \
     --name "${BINARY_FULL_NAME}" \
     --add-data "aegis-config.yaml:." \
-    --hidden-import=aegis.cli.main \
-    --hidden-import=aegis.discovery.discovery \
-    --hidden-import=aegis.questionnaire.questionnaire_runner \
-    --hidden-import=aegis.catalog.catalog_manager \
-    --hidden-import=aegis.ai.ai_policy_selector \
+    --hidden-import=config \
+    --hidden-import=models \
+    --hidden-import=interfaces \
+    --hidden-import=exceptions \
     --hidden-import=boto3 \
     --hidden-import=botocore \
     --hidden-import=kubernetes \
     --hidden-import=yaml \
     --hidden-import=click \
     --console \
-    aegis/cli/main.py
+    main.py
 
 # Check if build was successful
 if [ ! -f "dist/${BINARY_FULL_NAME}" ]; then

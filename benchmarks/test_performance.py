@@ -19,13 +19,30 @@ class TestDiscoveryPerformance:
     def test_cluster_info_collection(self, benchmark):
         """Benchmark cluster information collection."""
         with patch("kubernetes.config.load_kube_config"):
-            with patch("kubernetes.client.CoreV1Api") as mock_api:
-                mock_api.return_value.list_node.return_value.items = []
-                mock_api.return_value.list_namespace.return_value.items = []
+            with patch("kubernetes.client.CoreV1Api") as mock_core_api:
+                with patch("kubernetes.client.VersionApi") as mock_version_api:
+                    with patch("kubernetes.client.AppsV1Api") as mock_apps_api:
+                        # Mock all API responses
+                        mock_core_api.return_value.list_node.return_value.items = []
+                        mock_core_api.return_value.list_namespace.return_value.items = (
+                            []
+                        )
 
-                discovery = ClusterDiscovery()
-                result = benchmark(discovery._discover_basic_info)
-                assert result is not None
+                        # Mock version API response
+                        mock_version_response = Mock()
+                        mock_version_response.git_version = "v1.28.0"
+                        mock_version_api.return_value.get_code.return_value = (
+                            mock_version_response
+                        )
+
+                        # Mock apps API response
+                        mock_apps_api.return_value.list_deployment_for_all_namespaces.return_value.items = (
+                            []
+                        )
+
+                        discovery = ClusterDiscovery()
+                        result = benchmark(discovery._discover_basic_info)
+                        assert result is not None
 
 
 class TestQuestionnairePerformance:
@@ -64,7 +81,7 @@ class TestCatalogPerformance:
                     # Create mock config for PolicyCatalogManager
                     mock_config = {"catalog": {"local_storage": "./test-catalog"}}
                     manager = PolicyCatalogManager(mock_config)
-                    result = benchmark(manager.build_lightweight_index)
+                    result = benchmark(manager.build_policy_index)
                     assert result is not None
 
 
@@ -107,12 +124,29 @@ class TestMemoryUsage:
         tracemalloc.start()
 
         with patch("kubernetes.config.load_kube_config"):
-            with patch("kubernetes.client.CoreV1Api") as mock_api:
-                mock_api.return_value.list_node.return_value.items = []
-                mock_api.return_value.list_namespace.return_value.items = []
+            with patch("kubernetes.client.CoreV1Api") as mock_core_api:
+                with patch("kubernetes.client.VersionApi") as mock_version_api:
+                    with patch("kubernetes.client.AppsV1Api") as mock_apps_api:
+                        # Mock all API responses
+                        mock_core_api.return_value.list_node.return_value.items = []
+                        mock_core_api.return_value.list_namespace.return_value.items = (
+                            []
+                        )
 
-                discovery = ClusterDiscovery()
-                discovery._discover_basic_info()
+                        # Mock version API response
+                        mock_version_response = Mock()
+                        mock_version_response.git_version = "v1.28.0"
+                        mock_version_api.return_value.get_code.return_value = (
+                            mock_version_response
+                        )
+
+                        # Mock apps API response
+                        mock_apps_api.return_value.list_deployment_for_all_namespaces.return_value.items = (
+                            []
+                        )
+
+                        discovery = ClusterDiscovery()
+                        discovery._discover_basic_info()
 
         current, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()

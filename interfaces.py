@@ -5,14 +5,52 @@ Defines contracts for cluster discovery, questionnaire, catalog management, and 
 
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any
-from models import (
-    ClusterInfo,
-    GovernanceRequirements,
-    PolicyIndex,
-    PolicyCatalogEntry,
-    RecommendedPolicy,
-    PolicyRecommendation,
-)
+
+# Handle imports for both development and binary execution
+try:
+    from models import (
+        ClusterInfo,
+        GovernanceRequirements,
+        PolicyIndex,
+        PolicyCatalogEntry,
+        RecommendedPolicy,
+        PolicyRecommendation,
+    )
+except ImportError:
+    try:
+        from aegis.models import (
+            ClusterInfo,
+            GovernanceRequirements,
+            PolicyIndex,
+            PolicyCatalogEntry,
+            RecommendedPolicy,
+            PolicyRecommendation,
+        )
+    except ImportError:
+        # Fallback for binary execution - define minimal types
+        import os
+        import sys
+
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        if current_dir not in sys.path:
+            sys.path.insert(0, current_dir)
+        try:
+            from models import (
+                ClusterInfo,
+                GovernanceRequirements,
+                PolicyIndex,
+                PolicyCatalogEntry,
+                RecommendedPolicy,
+                PolicyRecommendation,
+            )
+        except ImportError:
+            # Final fallback - use Any for type hints
+            ClusterInfo = Any
+            GovernanceRequirements = Any
+            PolicyIndex = Any
+            PolicyCatalogEntry = Any
+            RecommendedPolicy = Any
+            PolicyRecommendation = Any
 
 
 class ClusterDiscoveryInterface(ABC):

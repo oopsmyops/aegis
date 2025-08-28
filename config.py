@@ -7,8 +7,24 @@ import os
 import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional
-from interfaces import ConfigurationInterface
-from exceptions import ConfigurationError
+
+# Handle imports for both development and binary execution
+try:
+    from interfaces import ConfigurationInterface
+    from exceptions import ConfigurationError
+except ImportError:
+    try:
+        from aegis.interfaces import ConfigurationInterface
+        from aegis.exceptions import ConfigurationError
+    except ImportError:
+        # Fallback for binary execution
+        import sys
+
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        if current_dir not in sys.path:
+            sys.path.insert(0, current_dir)
+        from interfaces import ConfigurationInterface
+        from exceptions import ConfigurationError
 
 
 class ConfigurationManager(ConfigurationInterface):
