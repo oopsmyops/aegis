@@ -1,0 +1,13 @@
+[bandit]
+# Bandit configuration for AEGIS
+# Skip B608 (hardcoded_sql_expressions) as we use f-strings for AI prompt templates, not SQL
+skips = B608
+
+# Exclude directories
+exclude_dirs = ./venv,./build,./dist,./tmp,./.pytest_cache,./.git
+
+# Test IDs to run (empty means run all except skipped)
+tests = 
+
+# Confidence levels: LOW, MEDIUM, HIGH
+# Severity levels: LOW, MEDIUM, HIGH
