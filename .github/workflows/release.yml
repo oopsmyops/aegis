@@ -618,7 +618,7 @@ jobs:
         EOF
 
     - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ env.VERSION }}
         name: AEGIS CLI ${{ env.VERSION }}
@@ -627,8 +627,9 @@ jobs:
         prerelease: ${{ env.PRERELEASE }}
         files: |
           release-assets/*
+        fail_on_unmatched_files: true
         generate_release_notes: true
-        make_latest: ${{ env.PRERELEASE == 'false' }}
+        latest: ${{ env.PRERELEASE == 'false' }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
