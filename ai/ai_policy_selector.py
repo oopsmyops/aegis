@@ -12,7 +12,7 @@ while staying within token limits and optimizing AI processing costs.
 
 import json
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from models import (
     ClusterInfo, GovernanceRequirements, PolicyIndex, PolicyCatalogEntry,
     RecommendedPolicy, PolicyRecommendation
@@ -34,7 +34,11 @@ class AIPolicySelector(AIPolicySelectorInterface):
         self.bedrock_client = bedrock_client
         self.policy_catalog_path = policy_catalog_path
         self.category_determiner = CategoryDeterminer(bedrock_client)
-        self.kyverno_validator = KyvernoValidator(bedrock_client)
+        
+        # Initialize validator with AI fixes enabled based on config
+        enable_ai_fixes = config.get('output', {}).get('fix_policies', False) if config else False
+        self.kyverno_validator = KyvernoValidator(bedrock_client, enable_ai_fixes=enable_ai_fixes)
+        
         self.output_manager = OutputManager(output_directory)
         self.logger = logging.getLogger(__name__)
         
@@ -226,51 +230,97 @@ class AIPolicySelector(AIPolicySelectorInterface):
         
         return recommended_policies
     
-    def validate_and_fix_policies(self, policies: List[RecommendedPolicy]) -> List[RecommendedPolicy]:
-        """Run Kyverno tests and fix failures."""
+    def validate_and_fix_policies(self, policies: List[RecommendedPolicy], 
+                                output_dir: Optional[str] = None) -> Tuple[List[RecommendedPolicy], List[Any]]:
+        """
+        Run Kyverno tests and apply AI-powered fixes if enabled.
+        
+        Returns:
+            Tuple of (validated_policies, validation_results)
+        """
         try:
-            # Use the new KyvernoValidator for comprehensive validation
-            validation_results = self.kyverno_validator.validate_batch_policies(policies)
+            # Use output directory from output manager if not provided
+            if not output_dir:
+                output_dir = self.output_manager.output_directory
             
-            # Update policies with validation results and fixes
+            # First, organize policies into output directory for validation
+            # This is needed because the new validator works on organized files
+            temp_validation_results = []
+            for policy in policies:
+                temp_validation_results.append(type('ValidationResult', (), {
+                    'policy_name': policy.original_policy.name,
+                    'passed': True,
+                    'errors': [],
+                    'warnings': []
+                })())
+            
+            # Create temporary organization for validation
+            created_files = self.output_manager.organize_policies_by_categories(
+                type('PolicyRecommendation', (), {
+                    'recommended_policies': policies,
+                    'categories': [p.category or p.original_policy.category for p in policies],
+                    'cluster_info': None,
+                    'requirements': None,
+                    'generation_timestamp': None,
+                    'ai_model_used': self.bedrock_client.model_id,
+                    'validation_summary': {}
+                })(),
+                temp_validation_results
+            )
+            
+            # Now run comprehensive validation with the new validator
+            validation_results, report_file = self.kyverno_validator.validate_policies_with_report(
+                policies, output_dir
+            )
+            
+            # Update policies with validation results
             validated_policies = []
-            for policy, validation_result in zip(policies, validation_results):
-                # Update policy status
-                policy.validation_status = "passed" if validation_result.passed else "failed"
+            for policy in policies:
+                # Find corresponding validation result
+                validation_result = next(
+                    (vr for vr in validation_results if vr.policy_name == policy.original_policy.name),
+                    None
+                )
                 
-                # Only apply fixes to test cases, never modify policy content
-                if validation_result.fixed_content and not validation_result.passed:
-                    # Only fix test cases, not policies - log the issue instead
-                    self.logger.warning(f"Policy {policy.original_policy.name} failed validation but policy content will not be modified")
-                    policy.validation_status = "failed"
-                    policy.customizations_applied.append("Validation failed - policy kept as original")
-                
-                # Only generate test case if missing and no test directory exists
-                if not policy.test_content and not policy.original_policy.test_directory:
-                    try:
-                        generated_test = self.kyverno_validator.generate_test_case(policy.customized_content)
-                        policy.test_content = generated_test
-                        policy.customizations_applied.append("AI-generated test case added")
-                        self.logger.info(f"Generated test case for {policy.original_policy.name} (no existing test found)")
-                    except Exception as e:
-                        self.logger.warning(f"Could not generate test case for {policy.original_policy.name}: {e}")
-                elif policy.original_policy.test_directory:
-                    self.logger.info(f"Using existing test case for {policy.original_policy.name}")
+                if validation_result:
+                    policy.validation_status = "passed" if validation_result.passed else "failed"
+                    
+                    # Add validation info to customizations
+                    if validation_result.generated_tests:
+                        policy.customizations_applied.append("AI-generated test cases")
+                    
+                    if validation_result.fixed_content:
+                        policy.customizations_applied.append("AI-fixed test cases")
+                    
+                    if validation_result.warnings:
+                        policy.customizations_applied.extend([f"Warning: {w}" for w in validation_result.warnings[:2]])
+                else:
+                    policy.validation_status = "error"
                 
                 validated_policies.append(policy)
             
-            return validated_policies
+            self.logger.info(f"Validation completed: {len(validation_results)} policies processed")
+            return validated_policies, validation_results
             
         except Exception as e:
             self.logger.error(f"Error in validation and fixing: {e}")
             # Fallback to basic validation
+            validation_results = []
             for policy in policies:
                 policy.validation_status = "error"
-            return policies
+                validation_results.append(type('ValidationResult', (), {
+                    'policy_name': policy.original_policy.name,
+                    'passed': False,
+                    'errors': [f"Validation error: {e}"],
+                    'warnings': [],
+                    'fixed_content': None,
+                    'generated_tests': False
+                })())
+            return policies, validation_results
     
     def generate_complete_recommendation(self, cluster_info: ClusterInfo, requirements: GovernanceRequirements,
                                        policy_index: PolicyIndex, target_count: int = 20) -> PolicyRecommendation:
-        """Generate complete policy recommendation with all steps."""
+        """Generate complete policy recommendation with all steps (basic validation only)."""
         try:
             # Step 1: Select policies using Two-Phase approach
             selected_policies = self.select_policies_two_phase(cluster_info, requirements, policy_index, target_count)
@@ -281,8 +331,12 @@ class AIPolicySelector(AIPolicySelectorInterface):
             # Step 3: Copy policies as-is (NO customization despite method name)
             customized_policies = self.customize_policies(selected_policies, requirements)
             
-            # Step 4: Validate policies
-            validated_policies = self.validate_and_fix_policies(customized_policies)
+            # Step 4: Basic validation (no AI fixes for this method)
+            # For comprehensive validation with AI fixes, use generate_organized_output instead
+            validated_policies = []
+            for policy in customized_policies:
+                policy.validation_status = "pending"  # Basic validation only
+                validated_policies.append(policy)
             
             # Step 5: Generate validation summary
             validation_summary = self._generate_validation_summary(validated_policies)
@@ -409,28 +463,61 @@ class AIPolicySelector(AIPolicySelectorInterface):
 
     def generate_organized_output(self, cluster_info: ClusterInfo, requirements: GovernanceRequirements,
                                 policy_index: PolicyIndex, target_count: int = 20) -> Dict[str, Any]:
-        """Generate complete policy recommendation with organized output files."""
+        """Generate complete policy recommendation with organized output files and validation."""
         try:
-            # Generate the recommendation
-            recommendation = self.generate_complete_recommendation(
-                cluster_info, requirements, policy_index, target_count
+            # Step 1: Generate basic recommendation without validation
+            self.logger.info("Generating policy recommendation...")
+            
+            # Phase 1: Filter policies
+            candidate_policy_names = self.phase_one_filter(cluster_info, requirements, policy_index)
+            
+            # Phase 2: Select final policies
+            selected_policies = self.phase_two_select(
+                cluster_info, requirements, candidate_policy_names, target_count
             )
             
-            # Get validation results for output organization
-            validation_results = self.kyverno_validator.validate_batch_policies(recommendation.recommended_policies)
+            # Step 2: Determine categories
+            categories = self.category_determiner.determine_categories(
+                cluster_info, selected_policies, requirements
+            )
             
-            # Organize policies into directory structure
+            # Step 3: Customize policies (copy as-is from catalog)
+            customized_policies = self.customize_policies(selected_policies, requirements)
+            
+            # Step 4: Validate and fix policies with comprehensive validation
+            self.logger.info("Running comprehensive validation with AI fixes...")
+            validated_policies, validation_results = self.validate_and_fix_policies(
+                customized_policies, self.output_manager.output_directory
+            )
+            
+            # Step 5: Create final recommendation object
+            recommendation = PolicyRecommendation(
+                cluster_info=cluster_info,
+                requirements=requirements,
+                recommended_policies=validated_policies,
+                categories=categories,
+                ai_model_used=self.bedrock_client.model_id,
+                validation_summary=self._generate_validation_summary(validated_policies)
+            )
+            
+            # Step 6: Organize policies into final directory structure
             created_files = self.output_manager.organize_policies_by_categories(
                 recommendation, validation_results
             )
             
-            # Create deployment guide
+            # Step 7: Create deployment guide
             deployment_guide = self.output_manager.create_deployment_guide(
                 recommendation, validation_results
             )
             
-            # Generate comprehensive validation report
-            validation_report = self.output_manager.generate_validation_report(validation_results)
+            # Step 8: Generate comprehensive validation report (YAML format)
+            validation_report = None
+            if validation_results:
+                validation_report = validation_results[0].validation_report.get('report_file') if validation_results else None
+                if not validation_report:
+                    validation_report = self.output_manager.generate_validation_report(validation_results)
+            
+            self.logger.info(f"Organized output generation completed successfully")
             
             return {
                 "recommendation": recommendation,
@@ -913,7 +1000,8 @@ Example response format:
             self.logger.error(f"Error parsing Phase 1 response: {e}")
             # Return fallback selection instead of raising error
             self.logger.warning("Using fallback Phase 1 selection due to parsing error")
-            return []
+            # Don't return empty list here - let the caller handle the fallback
+            raise e
     
     def _extract_lightweight_policies_from_index(self, policy_index: PolicyIndex) -> List[Dict[str, Any]]:
         """Extract lightweight policy metadata from policy index."""

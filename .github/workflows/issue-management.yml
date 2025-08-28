@@ -1,0 +1,295 @@
+name: Issue Management
+
+on:
+  issues:
+    types: [opened, labeled, unlabeled]
+  issue_comment:
+    types: [created]
+  schedule:
+    # Run daily at 9 AM UTC to manage stale issues
+    - cron: '0 9 * * *'
+
+jobs:
+  label-new-issues:
+    name: Auto-label New Issues
+    runs-on: ubuntu-latest
+    if: github.event.action == 'opened' && github.event.issue
+    
+    steps:
+    - name: Add triage label to new issues
+      uses: actions/github-script@v7
+      with:
+        script: |
+          await github.rest.issues.addLabels({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            labels: ['triage', 'needs-investigation']
+          });
+
+    - name: Auto-label based on issue content
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const issue = context.payload.issue;
+          const title = issue.title.toLowerCase();
+          const body = issue.body ? issue.body.toLowerCase() : '';
+          const content = title + ' ' + body;
+          
+          const labels = [];
+          
+          // Bug-related keywords
+          if (content.includes('bug') || content.includes('error') || content.includes('crash') || 
+              content.includes('fail') || content.includes('broken') || content.includes('issue')) {
+            labels.push('bug');
+          }
+          
+          // Feature request keywords
+          if (content.includes('feature') || content.includes('enhancement') || 
+              content.includes('request') || content.includes('add') || content.includes('support')) {
+            labels.push('enhancement');
+          }
+          
+          // Documentation keywords
+          if (content.includes('documentation') || content.includes('docs') || 
+              content.includes('readme') || content.includes('guide')) {
+            labels.push('documentation');
+          }
+          
+          // Performance keywords
+          if (content.includes('performance') || content.includes('slow') || 
+              content.includes('memory') || content.includes('cpu')) {
+            labels.push('performance');
+          }
+          
+          // Security keywords
+          if (content.includes('security') || content.includes('vulnerability') || 
+              content.includes('cve') || content.includes('exploit')) {
+            labels.push('security');
+          }
+          
+          // Platform-specific keywords
+          if (content.includes('windows')) labels.push('platform:windows');
+          if (content.includes('macos') || content.includes('mac')) labels.push('platform:macos');
+          if (content.includes('linux')) labels.push('platform:linux');
+          
+          // Component-specific keywords
+          if (content.includes('discovery') || content.includes('cluster')) labels.push('component:discovery');
+          if (content.includes('questionnaire') || content.includes('question')) labels.push('component:questionnaire');
+          if (content.includes('catalog') || content.includes('policy')) labels.push('component:catalog');
+          if (content.includes('ai') || content.includes('bedrock') || content.includes('recommendation')) labels.push('component:ai');
+          if (content.includes('cli') || content.includes('command')) labels.push('component:cli');
+          
+          if (labels.length > 0) {
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: labels
+            });
+          }
+
+    - name: Welcome new contributors
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const issue = context.payload.issue;
+          
+          // Check if this is the user's first issue
+          const issues = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            creator: issue.user.login,
+            state: 'all'
+          });
+          
+          if (issues.data.length === 1) {
+            const welcomeMessage = `👋 Welcome to AEGIS! Thank you for opening your first issue.
+
+            To help us assist you better, please ensure your issue includes:
+            
+            - **Clear description** of the problem or feature request
+            - **Steps to reproduce** (for bugs)
+            - **Expected vs actual behavior** (for bugs)
+            - **Environment details** (OS, Python version, AEGIS version)
+            - **Relevant logs or error messages**
+            
+            Our maintainers will review your issue and respond as soon as possible. 
+            
+            📚 **Helpful Resources:**
+            - [Documentation](../README.md)
+            - [Contributing Guidelines](../CONTRIBUTING.md)
+            - [Release Notes](../releases)
+            
+            Thank you for contributing to AEGIS! 🛡️`;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: welcomeMessage
+            });
+          }
+
+  manage-stale-issues:
+    name: Manage Stale Issues
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    
+    steps:
+    - name: Mark stale issues
+      uses: actions/stale@v8
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        stale-issue-message: |
+          This issue has been automatically marked as stale because it has not had recent activity. 
+          
+          **Next Steps:**
+          - If this issue is still relevant, please comment to keep it open
+          - If you have additional information, please share it
+          - If this issue is resolved, please close it
+          
+          This issue will be automatically closed in 7 days if no further activity occurs.
+          
+          Thank you for your contribution to AEGIS! 🛡️
+        close-issue-message: |
+          This issue has been automatically closed due to inactivity. 
+          
+          If you believe this issue is still relevant, please reopen it or create a new issue with updated information.
+          
+          Thank you for your contribution to AEGIS! 🛡️
+        stale-issue-label: 'stale'
+        days-before-stale: 30
+        days-before-close: 7
+        exempt-issue-labels: 'pinned,security,critical,good first issue'
+        operations-per-run: 30
+
+  priority-labeling:
+    name: Priority Labeling
+    runs-on: ubuntu-latest
+    if: github.event.action == 'labeled' && github.event.issue
+    
+    steps:
+    - name: Set priority based on labels
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const issue = context.payload.issue;
+          const labels = issue.labels.map(label => label.name);
+          
+          // Remove existing priority labels
+          const priorityLabels = ['priority:low', 'priority:medium', 'priority:high', 'priority:critical'];
+          const currentPriorityLabels = labels.filter(label => priorityLabels.includes(label));
+          
+          let newPriority = null;
+          
+          // Determine priority based on other labels
+          if (labels.includes('security') || labels.includes('critical')) {
+            newPriority = 'priority:critical';
+          } else if (labels.includes('bug') && (labels.includes('crash') || labels.includes('data-loss'))) {
+            newPriority = 'priority:high';
+          } else if (labels.includes('bug')) {
+            newPriority = 'priority:medium';
+          } else if (labels.includes('enhancement')) {
+            newPriority = 'priority:low';
+          }
+          
+          if (newPriority && !currentPriorityLabels.includes(newPriority)) {
+            // Remove old priority labels
+            for (const oldLabel of currentPriorityLabels) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  name: oldLabel
+                });
+              } catch (error) {
+                console.log(`Label ${oldLabel} not found, skipping removal`);
+              }
+            }
+            
+            // Add new priority label
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: [newPriority]
+            });
+          }
+
+  security-issue-handling:
+    name: Handle Security Issues
+    runs-on: ubuntu-latest
+    if: github.event.action == 'labeled' && contains(github.event.label.name, 'security')
+    
+    steps:
+    - name: Notify security team
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const securityMessage = `🔒 **Security Issue Detected**
+          
+          This issue has been labeled as a security concern and requires immediate attention.
+          
+          **Security Team Actions Required:**
+          1. Assess the severity of the security issue
+          2. Determine if this should be handled privately
+          3. Create a security advisory if needed
+          4. Coordinate with maintainers for fix and disclosure
+          
+          **Reporter:** Please do not share additional details publicly. 
+          If this is a serious vulnerability, consider reporting it privately through our security policy.
+          
+          @aegis-security-team`;
+          
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: securityMessage
+          });
+          
+          // Add critical priority
+          await github.rest.issues.addLabels({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            labels: ['priority:critical', 'needs-security-review']
+          });
+
+  good-first-issue-management:
+    name: Manage Good First Issues
+    runs-on: ubuntu-latest
+    if: github.event.action == 'labeled' && contains(github.event.label.name, 'good first issue')
+    
+    steps:
+    - name: Welcome new contributors to good first issue
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const welcomeMessage = `🌟 **Good First Issue**
+          
+          This issue has been marked as a good first issue! It's perfect for newcomers to the project.
+          
+          **For New Contributors:**
+          - This issue is designed to be approachable for first-time contributors
+          - Feel free to ask questions if anything is unclear
+          - Check our [Contributing Guidelines](../CONTRIBUTING.md) for setup instructions
+          - Comment below if you'd like to work on this issue
+          
+          **Getting Started:**
+          1. Fork the repository
+          2. Set up your development environment
+          3. Create a feature branch
+          4. Make your changes
+          5. Submit a pull request
+          
+          We're here to help! Don't hesitate to ask questions. 🚀`;
+          
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: welcomeMessage
+          });

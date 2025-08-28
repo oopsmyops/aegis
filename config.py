@@ -78,41 +78,54 @@ class ConfigurationManager(ConfigurationInterface):
     def get_default_config(self) -> Dict[str, Any]:
         """Get default configuration values."""
         return {
-            "cluster": {
-                "kubeconfig_path": "~/.kube/config",
-                "context": None,
-                "timeout": 60
-            },
-            "questionnaire": {
-                "total_questions": 20
+            "ai": {
+                "max_tokens": 4000,
+                "model": "amazon.nova-pro-v1:0",
+                "policy_count": {
+                    "total_target": 20
+                },
+                "provider": "aws-bedrock",
+                "region": "us-east-1",
+                "temperature": 0.1,
+                "two_phase_selection": {
+                    "enabled": True,
+                    "phase_one_candidates": 150,
+                    "phase_one_max_tokens": 2000,
+                    "phase_one_temperature": 0.1,
+                    "phase_two_max_tokens": 4000,
+                    "phase_two_temperature": 0.1,
+                    "fallback_enabled": True,
+                    "retry_attempts": 3
+                },
+                "error_handling": {
+                    "enable_fallbacks": True,
+                    "max_retry_attempts": 3,
+                    "fallback_models": [
+                        "anthropic.claude-3-haiku-20240307-v1:0",
+                        "amazon.nova-lite-v1:0",
+                        "anthropic.claude-instant-v1"
+                    ],
+                    "emergency_selection": True
+                }
             },
             "catalog": {
+                "index_file": "./policy-catalog/policy-index.json",
+                "local_storage": "./policy-catalog",
                 "repositories": [
                     {
                         "url": "https://github.com/kyverno/policies",
                         "branch": "main"
-                    },
-                    {
-                        "url": "https://github.com/nirmata/kyverno-policies", 
-                        "branch": "main"
                     }
-                ],
-                "local_storage": "./policy-catalog",
-                "index_file": "./policy-index.json"
+                ]
             },
-            "ai": {
-                "provider": "aws-bedrock",
-                "model": "anthropic.claude-3-sonnet-20240229-v1:0",
-                "region": "us-east-1",
-                "max_tokens": 4000,
-                "temperature": 0.1,
-                "policy_count": {
-                    "total_target": 20
-                },
-                "catalog_sampling": {
-                    "max_policies_per_category": 10,
-                    "total_policies_for_ai": 50
-                }
+            "cluster": {
+                "context": "kind-kind-wsl",
+                "kubeconfig_path": "~/.kube/config",
+                "timeout": 60
+            },
+            "logging": {
+                "file": "./aegis.log",
+                "level": "INFO"
             },
             "output": {
                 "directory": "./recommended-policies",
@@ -120,9 +133,8 @@ class ConfigurationManager(ConfigurationInterface):
                 "include_tests": False,
                 "validate_policies": False
             },
-            "logging": {
-                "level": "INFO",
-                "file": "./aegis.log"
+            "questionnaire": {
+                "total_questions": 20
             }
         }
     

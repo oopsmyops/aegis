@@ -1,0 +1,581 @@
+name: Build and Release Multi-Arch Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v1.0.0
+  workflow_dispatch:  # Allow manual triggering
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        default: 'v0.1.0'
+      prerelease:
+        description: 'Mark as pre-release'
+        type: boolean
+        default: false
+
+env:
+  PYTHON_VERSION: '3.11'
+  BINARY_NAME: 'aegis'
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov
+
+    - name: Run tests
+      run: |
+        python -m pytest tests/ -v --cov=. --cov-report=xml
+
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      if: always()
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false
+
+  build:
+    name: Build ${{ matrix.os }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux builds
+          - os: linux
+            arch: x64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: linux
+            arch: arm64
+            runner: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+          # macOS builds
+          - os: macos
+            arch: x64
+            runner: macos-13  # Intel runner
+            target: x86_64-apple-darwin
+          - os: macos
+            arch: arm64
+            runner: macos-latest  # Apple Silicon runner
+            target: aarch64-apple-darwin
+          # Windows builds
+          - os: windows
+            arch: x64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Set version from tag or input
+      shell: bash
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION="${{ github.ref_name }}"
+        fi
+        # Remove 'v' prefix if present for version number
+        VERSION_NUM=$(echo $VERSION | sed 's/^v//')
+        echo "VERSION=${VERSION}" >> $GITHUB_ENV
+        echo "VERSION_NUM=${VERSION_NUM}" >> $GITHUB_ENV
+        echo "Building version: ${VERSION} (${VERSION_NUM})"
+
+    - name: Update version in setup.py
+      shell: bash
+      run: |
+        sed -i.bak "s/version=\"[^\"]*\"/version=\"${VERSION_NUM}\"/" setup.py
+        echo "Updated version to: ${VERSION_NUM}"
+        
+    - name: Set up cross-compilation for ARM64 (Linux only)
+      if: matrix.os == 'linux' && matrix.arch == 'arm64'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-aarch64-linux-gnu
+        echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+
+    - name: Build binary with PyInstaller (Linux/macOS)
+      if: matrix.os != 'windows'
+      run: |
+        # Create PyInstaller spec file for better control
+        cat > aegis.spec << 'EOF'
+        # -*- mode: python ; coding: utf-8 -*-
+        
+        block_cipher = None
+        
+        a = Analysis(
+            ['aegis/cli/main.py'],
+            pathex=[],
+            binaries=[],
+            datas=[('aegis-config.yaml', '.')],
+            hiddenimports=[
+                'aegis.cli.main',
+                'aegis.discovery.discovery',
+                'aegis.questionnaire.questionnaire_runner',
+                'aegis.catalog.catalog_manager',
+                'aegis.ai.ai_policy_selector',
+                'boto3',
+                'botocore',
+                'kubernetes',
+                'yaml',
+                'click',
+                'pkg_resources.py2_warn'
+            ],
+            hookspath=[],
+            hooksconfig={},
+            runtime_hooks=[],
+            excludes=[],
+            win_no_prefer_redirects=False,
+            win_private_assemblies=False,
+            cipher=block_cipher,
+            noarchive=False,
+        )
+        
+        pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+        
+        exe = EXE(
+            pyz,
+            a.scripts,
+            a.binaries,
+            a.zipfiles,
+            a.datas,
+            [],
+            name='${{ env.BINARY_NAME }}-${{ matrix.os }}-${{ matrix.arch }}',
+            debug=False,
+            bootloader_ignore_signals=False,
+            strip=False,
+            upx=True,
+            upx_exclude=[],
+            runtime_tmpdir=None,
+            console=True,
+            disable_windowed_traceback=False,
+            argv_emulation=False,
+            target_arch=None,
+            codesign_identity=None,
+            entitlements_file=None,
+        )
+        EOF
+        
+        pyinstaller --clean aegis.spec
+
+    - name: Build binary with PyInstaller (Windows)
+      if: matrix.os == 'windows'
+      shell: pwsh
+      run: |
+        # Create PyInstaller spec file for Windows
+        @"
+        # -*- mode: python ; coding: utf-8 -*-
+        
+        block_cipher = None
+        
+        a = Analysis(
+            ['aegis/cli/main.py'],
+            pathex=[],
+            binaries=[],
+            datas=[('aegis-config.yaml', '.')],
+            hiddenimports=[
+                'aegis.cli.main',
+                'aegis.discovery.discovery',
+                'aegis.questionnaire.questionnaire_runner',
+                'aegis.catalog.catalog_manager',
+                'aegis.ai.ai_policy_selector',
+                'boto3',
+                'botocore',
+                'kubernetes',
+                'yaml',
+                'click',
+                'pkg_resources.py2_warn'
+            ],
+            hookspath=[],
+            hooksconfig={},
+            runtime_hooks=[],
+            excludes=[],
+            win_no_prefer_redirects=False,
+            win_private_assemblies=False,
+            cipher=block_cipher,
+            noarchive=False,
+        )
+        
+        pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+        
+        exe = EXE(
+            pyz,
+            a.scripts,
+            a.binaries,
+            a.zipfiles,
+            a.datas,
+            [],
+            name='${{ env.BINARY_NAME }}-${{ matrix.os }}-${{ matrix.arch }}.exe',
+            debug=False,
+            bootloader_ignore_signals=False,
+            strip=False,
+            upx=True,
+            upx_exclude=[],
+            runtime_tmpdir=None,
+            console=True,
+            disable_windowed_traceback=False,
+            argv_emulation=False,
+            target_arch=None,
+            codesign_identity=None,
+            entitlements_file=None,
+        )
+        "@ | Out-File -FilePath aegis.spec -Encoding utf8
+        
+        pyinstaller --clean aegis.spec
+
+    - name: Test binary (Linux/macOS)
+      if: matrix.os != 'windows'
+      run: |
+        BINARY_PATH="dist/${{ env.BINARY_NAME }}-${{ matrix.os }}-${{ matrix.arch }}"
+        chmod +x "${BINARY_PATH}"
+        
+        echo "Testing binary: ${BINARY_PATH}"
+        echo "Binary size: $(du -h "${BINARY_PATH}" | cut -f1)"
+        
+        # Test help command (should always work)
+        if "${BINARY_PATH}" --help > /dev/null 2>&1; then
+          echo "✅ Help command test passed"
+        else
+          echo "❌ Help command test failed"
+          exit 1
+        fi
+        
+        # Test version command (may not be implemented)
+        if "${BINARY_PATH}" --version > /dev/null 2>&1; then
+          echo "✅ Version command test passed"
+        else
+          echo "⚠️ Version command not available (this is OK)"
+        fi
+
+    - name: Test binary (Windows)
+      if: matrix.os == 'windows'
+      shell: pwsh
+      run: |
+        $binaryPath = "dist\${{ env.BINARY_NAME }}-${{ matrix.os }}-${{ matrix.arch }}.exe"
+        
+        Write-Host "Testing binary: $binaryPath"
+        Write-Host "Binary size: $((Get-Item $binaryPath).Length / 1MB) MB"
+        
+        # Test help command (should always work)
+        try {
+          & $binaryPath --help | Out-Null
+          Write-Host "✅ Help command test passed"
+        } catch {
+          Write-Host "❌ Help command test failed"
+          exit 1
+        }
+        
+        # Test version command (may not be implemented)
+        try {
+          & $binaryPath --version | Out-Null
+          Write-Host "✅ Version command test passed"
+        } catch {
+          Write-Host "⚠️ Version command not available (this is OK)"
+        }
+
+    - name: Create checksums and metadata
+      shell: bash
+      run: |
+        cd dist
+        if [ "${{ matrix.os }}" = "windows" ]; then
+          BINARY_FILE="${{ env.BINARY_NAME }}-${{ matrix.os }}-${{ matrix.arch }}.exe"
+        else
+          BINARY_FILE="${{ env.BINARY_NAME }}-${{ matrix.os }}-${{ matrix.arch }}"
+        fi
+        
+        # Verify binary exists
+        if [ ! -f "${BINARY_FILE}" ]; then
+          echo "❌ Binary not found: ${BINARY_FILE}"
+          ls -la
+          exit 1
+        fi
+        
+        # Create checksums
+        sha256sum "${BINARY_FILE}" > "${BINARY_FILE}.sha256"
+        md5sum "${BINARY_FILE}" > "${BINARY_FILE}.md5"
+        
+        # Create metadata file
+        cat > "${BINARY_FILE}.info" << EOF
+        Binary: ${BINARY_FILE}
+        Version: ${{ env.VERSION }}
+        Platform: ${{ matrix.os }}-${{ matrix.arch }}
+        Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        Size: $(stat -c%s "${BINARY_FILE}") bytes
+        SHA256: $(cat "${BINARY_FILE}.sha256" | cut -d' ' -f1)
+        MD5: $(cat "${BINARY_FILE}.md5" | cut -d' ' -f1)
+        EOF
+        
+        echo "📦 Created checksums and metadata for ${BINARY_FILE}"
+        echo "SHA256: $(cat "${BINARY_FILE}.sha256")"
+        echo "MD5: $(cat "${BINARY_FILE}.md5")"
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.BINARY_NAME }}-${{ matrix.os }}-${{ matrix.arch }}
+        path: |
+          dist/${{ env.BINARY_NAME }}-*
+        retention-days: 30
+        compression-level: 9
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set version and prerelease status
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+          PRERELEASE="${{ github.event.inputs.prerelease }}"
+        else
+          VERSION="${{ github.ref_name }}"
+          # Auto-detect prerelease from version string
+          if [[ "$VERSION" =~ (alpha|beta|rc|dev) ]]; then
+            PRERELEASE="true"
+          else
+            PRERELEASE="false"
+          fi
+        fi
+        
+        echo "VERSION=${VERSION}" >> $GITHUB_ENV
+        echo "PRERELEASE=${PRERELEASE}" >> $GITHUB_ENV
+        echo "Creating release for version: ${VERSION} (prerelease: ${PRERELEASE})"
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        merge-multiple: true
+
+    - name: Prepare release assets
+      run: |
+        mkdir -p release-assets
+        
+        # Copy all binaries, checksums, and metadata to release directory
+        find artifacts -name "${{ env.BINARY_NAME }}-*" -type f | while read file; do
+          cp "$file" release-assets/
+        done
+        
+        # Create a comprehensive manifest
+        cat > release-assets/MANIFEST.txt << 'EOF'
+        AEGIS CLI ${{ env.VERSION }} - Release Manifest
+        ================================================
+        
+        Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        Git Commit: ${{ github.sha }}
+        
+        Included Files:
+        EOF
+        
+        cd release-assets
+        for file in *; do
+          if [ -f "$file" ]; then
+            echo "  - $file ($(stat -c%s "$file") bytes)" >> MANIFEST.txt
+          fi
+        done
+        
+        # List all files that will be released
+        echo "📦 Release assets prepared:"
+        ls -la
+        echo ""
+        echo "📋 Manifest:"
+        cat MANIFEST.txt
+
+    - name: Generate release notes
+      run: |
+        cat > release-notes.md << 'EOF'
+        # AEGIS CLI ${{ env.VERSION }}
+        
+        ## 🚀 Features
+        
+        AEGIS (AI Enabled Governance Insights & Suggestions) is a comprehensive CLI tool that automates Kubernetes cluster governance through:
+        
+        - **Intelligent Cluster Discovery**: Automatically scan and analyze cluster configurations
+        - **Interactive Requirements Gathering**: Collect governance requirements through targeted questionnaires  
+        - **Policy Catalog Management**: Build and maintain curated policy catalogs from GitHub repositories
+        - **AI-Powered Policy Selection**: Use AWS Bedrock to intelligently select and customize policies
+        - **Multi-Phase Validation**: Validate policies with Kyverno and generate missing test cases
+        
+        ## 📦 Installation
+        
+        Download the appropriate binary for your platform:
+        
+        ### Linux x64
+        ```bash
+        curl -L -o aegis https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/aegis-linux-x64
+        chmod +x aegis
+        sudo mv aegis /usr/local/bin/
+        ```
+        
+        ### Linux ARM64
+        ```bash
+        curl -L -o aegis https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/aegis-linux-arm64
+        chmod +x aegis
+        sudo mv aegis /usr/local/bin/
+        ```
+        
+        ### macOS x64 (Intel)
+        ```bash
+        curl -L -o aegis https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/aegis-macos-x64
+        chmod +x aegis
+        sudo mv aegis /usr/local/bin/
+        ```
+        
+        ### macOS ARM64 (Apple Silicon)
+        ```bash
+        curl -L -o aegis https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/aegis-macos-arm64
+        chmod +x aegis
+        sudo mv aegis /usr/local/bin/
+        ```
+        
+        ### Windows x64
+        Download `aegis-windows-x64.exe` and add it to your PATH.
+        
+        ## 🔧 Quick Start
+        
+        1. **Initialize configuration:**
+           ```bash
+           aegis config --init
+           ```
+        
+        2. **Run complete workflow:**
+           ```bash
+           aegis run --all
+           ```
+        
+        3. **Step-by-step execution:**
+           ```bash
+           aegis discover              # Scan cluster
+           aegis questionnaire         # Gather requirements  
+           aegis catalog               # Build policy catalog
+           aegis recommend             # Get AI recommendations
+           ```
+        
+        ## 🔐 Verification
+        
+        All binaries include SHA256 and MD5 checksums for verification:
+        
+        ```bash
+        # Verify SHA256 checksum
+        sha256sum -c aegis-linux-x64.sha256
+        
+        # Verify MD5 checksum  
+        md5sum -c aegis-linux-x64.md5
+        ```
+        
+        ## 📋 Requirements
+        
+        - Kubernetes cluster access (kubectl configured)
+        - AWS credentials for Bedrock AI services (optional, fallback available)
+        - Internet access for policy catalog downloads
+        
+        ## 🐛 Issues & Support
+        
+        Please report issues at: https://github.com/${{ github.repository }}/issues
+        
+        ---
+        
+        **Full Changelog**: https://github.com/${{ github.repository }}/compare/v0.0.1...${{ env.VERSION }}
+        EOF
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ env.VERSION }}
+        name: AEGIS CLI ${{ env.VERSION }}
+        body_path: release-notes.md
+        draft: false
+        prerelease: ${{ env.PRERELEASE }}
+        files: |
+          release-assets/*
+        generate_release_notes: true
+        make_latest: ${{ env.PRERELEASE == 'false' }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Update latest release info
+      run: |
+        echo "✅ Release ${{ env.VERSION }} created successfully!"
+        echo "📦 Binaries available for:"
+        echo "   • Linux x64/ARM64"  
+        echo "   • macOS x64/ARM64"
+        echo "   • Windows x64"
+        echo ""
+        echo "🔗 Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ env.VERSION }}"
+
+  notify:
+    name: Post-Release Notifications
+    needs: [build, release]
+    runs-on: ubuntu-latest
+    if: always() && (needs.build.result == 'success' && needs.release.result == 'success')
+    
+    steps:
+    - name: Set version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION="${{ github.ref_name }}"
+        fi
+        echo "VERSION=${VERSION}" >> $GITHUB_ENV
+
+    - name: Success notification
+      run: |
+        echo "🎉 AEGIS CLI ${{ env.VERSION }} has been successfully released!"
+        echo "📦 Multi-architecture binaries are now available"
+        echo "🔗 Download: https://github.com/${{ github.repository }}/releases/tag/${{ env.VERSION }}"

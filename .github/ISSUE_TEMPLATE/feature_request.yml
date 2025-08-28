@@ -1,0 +1,171 @@
+name: ✨ Feature Request
+description: Suggest a new feature or enhancement for AEGIS CLI
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting a new feature! Please provide detailed information to help us understand and evaluate your request.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please verify these items before submitting your feature request
+      options:
+        - label: I have searched existing issues to ensure this feature hasn't been requested
+          required: true
+        - label: I have read the project roadmap and documentation
+          required: true
+        - label: This feature aligns with the project's goals and scope
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What problem does this feature solve? What use case does it address?
+      placeholder: Describe the problem or limitation you're experiencing
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe your proposed solution in detail
+      placeholder: |
+        How should this feature work?
+        What should the user experience be like?
+        What commands or interfaces should be added?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which component of AEGIS would this feature affect?
+      options:
+        - Cluster Discovery
+        - Interactive Questionnaire
+        - Policy Catalog Management
+        - AI Policy Selection
+        - CLI Interface
+        - Configuration System
+        - Output/Reporting
+        - Multiple Components
+        - New Component
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature to you?
+      options:
+        - Low - Nice to have
+        - Medium - Would improve workflow
+        - High - Significant impact on usability
+        - Critical - Blocking current use case
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternative Solutions
+      description: Have you considered any alternative solutions or workarounds?
+      placeholder: |
+        - Other tools or approaches you've tried
+        - Workarounds you're currently using
+        - Why those alternatives don't fully solve the problem
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Usage Examples
+      description: Provide examples of how this feature would be used
+      placeholder: |
+        Show command examples, configuration snippets, or user workflows
+      render: bash
+
+  - type: checkboxes
+    id: breaking-changes
+    attributes:
+      label: Breaking Changes
+      description: Would this feature require breaking changes?
+      options:
+        - label: This feature would require breaking changes to existing functionality
+        - label: This feature could be implemented without breaking existing functionality
+        - label: I'm not sure about the impact on existing functionality
+
+  - type: dropdown
+    id: complexity
+    attributes:
+      label: Implementation Complexity
+      description: How complex do you think this feature would be to implement?
+      options:
+        - Simple - Minor addition or modification
+        - Medium - Moderate development effort
+        - Complex - Significant development effort
+        - Very Complex - Major architectural changes
+        - Unknown - I'm not sure
+
+  - type: textarea
+    id: benefits
+    attributes:
+      label: Benefits
+      description: What are the expected benefits of this feature?
+      placeholder: |
+        - Improved user experience
+        - Better performance
+        - Enhanced security
+        - Increased functionality
+        - etc.
+
+  - type: textarea
+    id: user-stories
+    attributes:
+      label: User Stories
+      description: Provide user stories that describe how different users would benefit
+      placeholder: |
+        As a [type of user], I want [feature] so that [benefit]
+        
+        Example:
+        As a platform engineer, I want automated policy recommendations so that I can secure my cluster without manual policy research.
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: What criteria should be met for this feature to be considered complete?
+      placeholder: |
+        - [ ] Feature works as described
+        - [ ] Documentation is updated
+        - [ ] Tests are added
+        - [ ] etc.
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Add any other context, mockups, or references
+      placeholder: |
+        - Links to similar features in other tools
+        - Screenshots or mockups
+        - Related discussions or issues
+        - Technical specifications or requirements
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you be interested in contributing this feature?
+      options:
+        - label: I would be willing to submit a pull request to implement this feature
+        - label: I would be willing to help with testing and feedback
+        - label: I would be willing to help with documentation

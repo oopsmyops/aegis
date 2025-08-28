@@ -3,6 +3,7 @@ Command classes for AEGIS CLI.
 Defines individual command implementations for better organization.
 """
 
+import os
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 from utils.logging_utils import LoggerMixin
@@ -217,5 +218,110 @@ class RecommendCommand(BaseCommand):
                 validate: bool = False) -> None:
         """Execute policy recommendation."""
         self.logger.info("Executing recommend command")
-        # Implementation will be added in task 5
-        pass
+        
+        try:
+            import yaml
+            import json
+            import time
+            from datetime import datetime
+            from ..ai import BedrockClient, AIPolicySelector
+            from ..models import ClusterInfo, GovernanceRequirements, PolicyIndex, PolicyCatalogEntry
+            
+            # Check if cluster discovery file exists
+            if not os.path.exists(input_file):
+                print(f"❌ Cluster discovery file not found: {input_file}")
+                print("💡 Please run 'aegis discover' and 'aegis questionnaire' first.")
+                return
+            
+            # Check if policy index exists
+            index_path = self.config['catalog']['index_file']
+            if not os.path.exists(index_path):
+                print(f"❌ Policy index not found: {index_path}")
+                print("💡 Please run 'aegis catalog' first to build the policy catalog.")
+                return
+            
+            print(f"🚀 Starting AI-powered policy recommendation...")
+            print(f"📄 Input file: {input_file}")
+            print(f"📂 Output directory: {output}")
+            
+            start_time = time.time()
+            
+            # Load cluster info and requirements from YAML (simplified)
+            with open(input_file, 'r', encoding='utf-8') as f:
+                cluster_data = yaml.safe_load(f)
+            
+            # Extract cluster info (simplified for demo)
+            cluster_info = ClusterInfo(
+                version=cluster_data.get('cluster_info', {}).get('kubernetes_version', 'unknown'),
+                managed_service=cluster_data.get('managed_service'),
+                node_count=cluster_data.get('cluster_info', {}).get('node_count', 0),
+                namespace_count=cluster_data.get('cluster_info', {}).get('namespace_count', 0)
+            )
+            
+            # Extract requirements (simplified for demo)
+            requirements = GovernanceRequirements(
+                compliance_frameworks=cluster_data.get('governance_requirements', {}).get('compliance_frameworks', []),
+                registries=cluster_data.get('governance_requirements', {}).get('registries', [])
+            )
+            
+            # Load policy index
+            with open(index_path, 'r', encoding='utf-8') as f:
+                index_data = json.load(f)
+            
+            # Convert to PolicyIndex object (simplified)
+            categories = {}
+            for category, policies_data in index_data.get('categories', {}).items():
+                policies = []
+                for policy_data in policies_data:
+                    policy = PolicyCatalogEntry(
+                        name=policy_data['name'],
+                        category=policy_data['category'],
+                        description=policy_data['description'],
+                        relative_path=policy_data['relative_path'],
+                        test_directory=policy_data.get('test_directory'),
+                        source_repo=policy_data.get('source_repo', ''),
+                        tags=policy_data.get('tags', [])
+                    )
+                    policies.append(policy)
+                categories[category] = policies
+            
+            policy_index = PolicyIndex(
+                categories=categories,
+                total_policies=index_data.get('total_policies', 0),
+                last_updated=datetime.now()
+            )
+            
+            # Initialize AI components
+            bedrock_client = BedrockClient(
+                region=self.config['ai']['region'],
+                model_id=self.config['ai']['model']
+            )
+            
+            ai_selector = AIPolicySelector(
+                bedrock_client, 
+                self.config['catalog']['local_storage'],
+                output,
+                self.config
+            )
+            
+            # Generate recommendations
+            target_count = count or self.config['ai']['policy_count']['total_target']
+            recommendation = ai_selector.generate_complete_recommendation(
+                cluster_info=cluster_info,
+                requirements=requirements,
+                policy_index=policy_index,
+                target_count=target_count
+            )
+            
+            end_time = time.time()
+            duration = end_time - start_time
+            
+            print(f"\n✅ Policy recommendation completed successfully in {duration:.1f}s!")
+            print(f"📂 Output directory: {output}")
+            print(f"📊 Total policies recommended: {len(recommendation.recommended_policies)}")
+            print(f"🎉 Recommendation process completed!")
+            
+        except Exception as e:
+            self.logger.error(f"Recommendation failed: {str(e)}")
+            print(f"❌ Policy recommendation failed: {str(e)}")
+            raise

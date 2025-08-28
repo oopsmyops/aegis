@@ -1,0 +1,61 @@
+name: Dependabot Auto-Merge
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Auto-merge Dependabot PRs
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Get Dependabot metadata
+      id: metadata
+      uses: dependabot/fetch-metadata@v1
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Auto-approve and merge minor/patch updates
+      if: steps.metadata.outputs.update-type == 'version-update:semver-patch' || steps.metadata.outputs.update-type == 'version-update:semver-minor'
+      run: |
+        # Auto-approve the PR
+        gh pr review --approve "${{ github.event.pull_request.html_url }}"
+        
+        # Enable auto-merge
+        gh pr merge --auto --squash "${{ github.event.pull_request.html_url }}"
+        
+        echo "✅ Auto-approved and enabled auto-merge for ${{ steps.metadata.outputs.dependency-names }}"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Comment on major updates
+      if: steps.metadata.outputs.update-type == 'version-update:semver-major'
+      run: |
+        gh pr comment "${{ github.event.pull_request.html_url }}" --body "🚨 **Major version update detected for ${{ steps.metadata.outputs.dependency-names }}**
+
+        This PR contains a major version update that may include breaking changes. Please review carefully before merging.
+        
+        **Update Details:**
+        - Dependency: ${{ steps.metadata.outputs.dependency-names }}
+        - Update Type: ${{ steps.metadata.outputs.update-type }}
+        - Previous Version: ${{ steps.metadata.outputs.previous-version }}
+        - New Version: ${{ steps.metadata.outputs.new-version }}
+        
+        **Recommended Actions:**
+        1. Review the changelog for breaking changes
+        2. Run comprehensive tests
+        3. Update any affected code
+        4. Manual approval required for merge"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
