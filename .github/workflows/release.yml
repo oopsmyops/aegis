@@ -442,6 +442,8 @@ jobs:
     name: Create Release
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     
     steps:
@@ -629,7 +631,7 @@ jobs:
           release-assets/*
         fail_on_unmatched_files: true
         generate_release_notes: true
-        latest: ${{ env.PRERELEASE == 'false' }}
+        make_latest: ${{ env.PRERELEASE == 'false' }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
