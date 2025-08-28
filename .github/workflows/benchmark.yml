@@ -43,6 +43,8 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pytest pytest-benchmark memory-profiler
+        # Install AEGIS in development mode to make imports work
+        pip install -e .
 
     - name: Create benchmark test
       run: |
@@ -237,7 +239,9 @@ jobs:
           --hidden-import=yaml \
           --hidden-import=click \
           --console \
-          aegis/cli/main.py
+          --workpath ./build \
+          --distpath ./dist \
+          cli/main.py
 
     - name: Analyze binary size
       run: |

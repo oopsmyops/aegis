@@ -17,103 +17,131 @@ from exceptions import FileSystemError
 
 class OutputManager:
     """Manages policy output organization and validation reporting."""
-    
+
     def __init__(self, output_directory: str = "./recommended-policies"):
         """Initialize output manager."""
         self.output_directory = output_directory
         self.logger = logging.getLogger(__name__)
-    
-    def organize_policies_by_categories(self, recommendation: PolicyRecommendation, 
-                                      validation_results: List[ValidationResult]) -> Dict[str, str]:
+
+    def organize_policies_by_categories(
+        self,
+        recommendation: PolicyRecommendation,
+        validation_results: List[ValidationResult],
+    ) -> Dict[str, str]:
         """Organize policies into dynamic category-based folder structure."""
         try:
             # Create output directory
             os.makedirs(self.output_directory, exist_ok=True)
-            
+
             # Group policies by category
             category_policies = self._group_policies_by_category(
-                recommendation.recommended_policies, 
-                recommendation.categories
+                recommendation.recommended_policies, recommendation.categories
             )
-            
+
             # Create validation results lookup
-            validation_lookup = {result.policy_name: result for result in validation_results}
-            
+            validation_lookup = {
+                result.policy_name: result for result in validation_results
+            }
+
             created_files = {}
-            
+
             # Process each category
             for category, policies in category_policies.items():
-                category_dir = os.path.join(self.output_directory, self._sanitize_category_name(category))
+                category_dir = os.path.join(
+                    self.output_directory, self._sanitize_category_name(category)
+                )
                 os.makedirs(category_dir, exist_ok=True)
-                
+
                 category_files = []
-                
+
                 # Process each policy in the category
                 for policy in policies:
                     policy_files = self._create_policy_files(
-                        policy, 
-                        category_dir, 
-                        validation_lookup.get(policy.original_policy.name)
+                        policy,
+                        category_dir,
+                        validation_lookup.get(policy.original_policy.name),
                     )
                     category_files.extend(policy_files)
-                
+
                 created_files[category] = category_files
-            
+
             # Create summary files
             self._create_recommendation_summary(recommendation, validation_results)
             self._create_validation_report(validation_results)
             self._create_category_index(category_policies, validation_results)
-            
-            self.logger.info(f"Successfully organized {len(recommendation.recommended_policies)} policies into {len(category_policies)} categories")
+
+            self.logger.info(
+                f"Successfully organized {len(recommendation.recommended_policies)} policies into {len(category_policies)} categories"
+            )
             return created_files
-            
+
         except Exception as e:
             self.logger.error(f"Error organizing policies: {e}")
             raise FileSystemError(f"Failed to organize policies: {e}")
-    
-    def create_policy_directory_structure(self, policy: RecommendedPolicy, base_dir: str, 
-                                        validation_result: Optional[ValidationResult] = None) -> List[str]:
+
+    def create_policy_directory_structure(
+        self,
+        policy: RecommendedPolicy,
+        base_dir: str,
+        validation_result: Optional[ValidationResult] = None,
+    ) -> List[str]:
         """Create directory structure for a single policy with all files."""
         try:
             policy_name = self._sanitize_policy_name(policy.original_policy.name)
             policy_dir = os.path.join(base_dir, policy_name)
             os.makedirs(policy_dir, exist_ok=True)
-            
+
             created_files = []
-            
+
             # Get the original policy file name from the relative path
-            original_policy_filename = os.path.basename(policy.original_policy.relative_path)
-            
+            original_policy_filename = os.path.basename(
+                policy.original_policy.relative_path
+            )
+
             # Create main policy file with correct original name
             policy_file = os.path.join(policy_dir, original_policy_filename)
             # NEVER use fixed_content as it might modify policy - always use original
             policy_content = policy.customized_content
-            
-            with open(policy_file, 'w', encoding='utf-8') as f:
+
+            with open(policy_file, "w", encoding="utf-8") as f:
                 f.write(policy_content)
             created_files.append(policy_file)
-            
+
             # Handle test files - preserve existing, only generate if missing
             test_file = os.path.join(policy_dir, "kyverno-test.yaml")
-            
+
             # Check if original test directory exists and copy existing test files
             if policy.original_policy.test_directory:
-                original_test_dir = os.path.join("./policy-catalog", policy.original_policy.test_directory)
+                original_test_dir = os.path.join(
+                    "./policy-catalog", policy.original_policy.test_directory
+                )
                 if os.path.exists(original_test_dir):
                     # Copy existing test files
-                    original_test_file = os.path.join(original_test_dir, "kyverno-test.yaml")
+                    original_test_file = os.path.join(
+                        original_test_dir, "kyverno-test.yaml"
+                    )
                     if os.path.exists(original_test_file):
                         import shutil
+
                         shutil.copy2(original_test_file, test_file)
                         created_files.append(test_file)
-                        self.logger.info(f"Copied existing test case for {policy.original_policy.name}")
-                    
+                        self.logger.info(
+                            f"Copied existing test case for {policy.original_policy.name}"
+                        )
+
                     # Copy resource files if they exist (check multiple possible names)
-                    resource_files_to_check = ["resource.yaml", "resources.yaml", "resource.yml", "resources.yml"]
+                    resource_files_to_check = [
+                        "resource.yaml",
+                        "resources.yaml",
+                        "resource.yml",
+                        "resources.yml",
+                    ]
                     resource_copied = False
-                    
+
                     for resource_filename in resource_files_to_check:
-                        original_resource_file = os.path.join(original_test_dir, resource_filename)
+                        original_resource_file = os.path.join(
+                            original_test_dir, resource_filename
+                        )
                         if os.path.exists(original_resource_file):
                             # Use the same filename as in the original
                             resource_file = os.path.join(policy_dir, resource_filename)
@@ -121,120 +149,139 @@ class OutputManager:
                             created_files.append(resource_file)
                             resource_copied = True
                             break
-                    
+
                     if not resource_copied:
                         # Generate sample resource if original doesn't exist
                         resource_file = os.path.join(policy_dir, "resource.yaml")
                         resource_content = self._generate_sample_resource(policy)
-                        with open(resource_file, 'w', encoding='utf-8') as f:
+                        with open(resource_file, "w", encoding="utf-8") as f:
                             f.write(resource_content)
                         created_files.append(resource_file)
                 else:
                     # Original test directory doesn't exist, generate if we have test content
                     if policy.test_content:
-                        with open(test_file, 'w', encoding='utf-8') as f:
+                        with open(test_file, "w", encoding="utf-8") as f:
                             f.write(policy.test_content)
                         created_files.append(test_file)
-                        self.logger.info(f"Generated new test case for {policy.original_policy.name}")
-                    
+                        self.logger.info(
+                            f"Generated new test case for {policy.original_policy.name}"
+                        )
+
                     # Generate sample resource
                     resource_file = os.path.join(policy_dir, "resource.yaml")
                     resource_content = self._generate_sample_resource(policy)
-                    with open(resource_file, 'w', encoding='utf-8') as f:
+                    with open(resource_file, "w", encoding="utf-8") as f:
                         f.write(resource_content)
                     created_files.append(resource_file)
             else:
                 # No test directory specified, generate if we have test content
                 if policy.test_content:
-                    with open(test_file, 'w', encoding='utf-8') as f:
+                    with open(test_file, "w", encoding="utf-8") as f:
                         f.write(policy.test_content)
                     created_files.append(test_file)
-                    self.logger.info(f"Generated new test case for {policy.original_policy.name}")
-                
+                    self.logger.info(
+                        f"Generated new test case for {policy.original_policy.name}"
+                    )
+
                 # Generate sample resource
                 resource_file = os.path.join(policy_dir, "resource.yaml")
                 resource_content = self._generate_sample_resource(policy)
-                with open(resource_file, 'w', encoding='utf-8') as f:
+                with open(resource_file, "w", encoding="utf-8") as f:
                     f.write(resource_content)
                 created_files.append(resource_file)
-            
+
             # Create policy metadata file
             metadata_file = os.path.join(policy_dir, "policy-info.yaml")
             metadata_content = self._create_policy_metadata(policy, validation_result)
-            with open(metadata_file, 'w', encoding='utf-8') as f:
+            with open(metadata_file, "w", encoding="utf-8") as f:
                 f.write(yaml.dump(metadata_content, default_flow_style=False))
             created_files.append(metadata_file)
-            
+
             return created_files
-            
+
         except Exception as e:
-            self.logger.error(f"Error creating policy directory for {policy.original_policy.name}: {e}")
+            self.logger.error(
+                f"Error creating policy directory for {policy.original_policy.name}: {e}"
+            )
             raise FileSystemError(f"Failed to create policy directory: {e}")
-    
-    def generate_validation_report(self, validation_results: List[ValidationResult], 
-                                 output_file: Optional[str] = None) -> str:
+
+    def generate_validation_report(
+        self,
+        validation_results: List[ValidationResult],
+        output_file: Optional[str] = None,
+    ) -> str:
         """Generate comprehensive validation report."""
         try:
             if not output_file:
-                output_file = os.path.join(self.output_directory, "validation-report.yaml")
-            
+                output_file = os.path.join(
+                    self.output_directory, "validation-report.yaml"
+                )
+
             # Calculate statistics
             total_policies = len(validation_results)
             passed_policies = sum(1 for r in validation_results if r.passed)
             failed_policies = total_policies - passed_policies
             fixed_policies = sum(1 for r in validation_results if r.fixed_content)
-            
+
             # Group results by status
             passed_results = [r for r in validation_results if r.passed]
             failed_results = [r for r in validation_results if not r.passed]
-            
+
             report = {
                 "validation_summary": {
                     "total_policies": total_policies,
                     "passed": passed_policies,
                     "failed": failed_policies,
-                    "success_rate": f"{(passed_policies/total_policies*100):.1f}%" if total_policies > 0 else "0%",
+                    "success_rate": (
+                        f"{(passed_policies/total_policies*100):.1f}%"
+                        if total_policies > 0
+                        else "0%"
+                    ),
                     "automatically_fixed": fixed_policies,
-                    "generated_at": datetime.now().isoformat()
+                    "generated_at": datetime.now().isoformat(),
                 },
                 "passed_policies": [
-                    {
-                        "name": r.policy_name,
-                        "warnings": r.warnings
-                    } for r in passed_results
+                    {"name": r.policy_name, "warnings": r.warnings}
+                    for r in passed_results
                 ],
                 "failed_policies": [
                     {
                         "name": r.policy_name,
                         "errors": r.errors,
-                        "automatically_fixed": bool(r.fixed_content)
-                    } for r in failed_results
+                        "automatically_fixed": bool(r.fixed_content),
+                    }
+                    for r in failed_results
                 ],
-                "recommendations": self._generate_validation_recommendations(validation_results)
+                "recommendations": self._generate_validation_recommendations(
+                    validation_results
+                ),
             }
-            
+
             # Write report
             os.makedirs(os.path.dirname(output_file), exist_ok=True)
-            with open(output_file, 'w', encoding='utf-8') as f:
+            with open(output_file, "w", encoding="utf-8") as f:
                 f.write(yaml.dump(report, default_flow_style=False))
-            
+
             self.logger.info(f"Validation report created: {output_file}")
             return output_file
-            
+
         except Exception as e:
             self.logger.error(f"Error generating validation report: {e}")
             raise FileSystemError(f"Failed to generate validation report: {e}")
-    
-    def create_deployment_guide(self, recommendation: PolicyRecommendation, 
-                              validation_results: List[ValidationResult]) -> str:
+
+    def create_deployment_guide(
+        self,
+        recommendation: PolicyRecommendation,
+        validation_results: List[ValidationResult],
+    ) -> str:
         """Create deployment guide for recommended policies."""
         try:
             guide_file = os.path.join(self.output_directory, "DEPLOYMENT_GUIDE.md")
-            
+
             # Calculate statistics
             total_policies = len(recommendation.recommended_policies)
             passed_validation = sum(1 for r in validation_results if r.passed)
-            
+
             guide_content = f"""# AEGIS Policy Deployment Guide
 
 ## Overview
@@ -249,23 +296,33 @@ This directory contains {total_policies} Kyverno policies recommended for your K
 
 ## Policy Categories
 """
-            
+
             # Add category information
             category_policies = self._group_policies_by_category(
-                recommendation.recommended_policies, 
-                recommendation.categories
+                recommendation.recommended_policies, recommendation.categories
             )
-            
+
             for category, policies in category_policies.items():
                 guide_content += f"\n### {category.replace('-', ' ').title()}\n"
                 guide_content += f"- **Policy Count**: {len(policies)}\n"
-                guide_content += f"- **Directory**: `./{self._sanitize_category_name(category)}/`\n"
-                
+                guide_content += (
+                    f"- **Directory**: `./{self._sanitize_category_name(category)}/`\n"
+                )
+
                 # List policies in category
                 for policy in policies:
-                    validation_status = "✅" if any(r.policy_name == policy.original_policy.name and r.passed for r in validation_results) else "❌"
-                    guide_content += f"  - {validation_status} {policy.original_policy.name}\n"
-            
+                    validation_status = (
+                        "✅"
+                        if any(
+                            r.policy_name == policy.original_policy.name and r.passed
+                            for r in validation_results
+                        )
+                        else "❌"
+                    )
+                    guide_content += (
+                        f"  - {validation_status} {policy.original_policy.name}\n"
+                    )
+
             guide_content += f"""
 ## Deployment Instructions
 
@@ -312,15 +369,15 @@ After reviewing audit results, you can switch policies to enforce mode by updati
 #### Customization Applied
 The following customizations were applied based on your requirements:
 """
-            
+
             # Add customization information
             all_customizations = set()
             for policy in recommendation.recommended_policies:
                 all_customizations.update(policy.customizations_applied)
-            
+
             for customization in sorted(all_customizations):
                 guide_content += f"- {customization}\n"
-            
+
             guide_content += f"""
 #### Compliance Frameworks
 {', '.join(recommendation.requirements.compliance_frameworks) if recommendation.requirements.compliance_frameworks else 'None specified'}
@@ -346,64 +403,78 @@ The following customizations were applied based on your requirements:
 - **Total Policies**: {total_policies}
 - **Validation Success Rate**: {(passed_validation/total_policies*100):.1f}%
 """
-            
-            with open(guide_file, 'w', encoding='utf-8') as f:
+
+            with open(guide_file, "w", encoding="utf-8") as f:
                 f.write(guide_content)
-            
+
             self.logger.info(f"Deployment guide created: {guide_file}")
             return guide_file
-            
+
         except Exception as e:
             self.logger.error(f"Error creating deployment guide: {e}")
             raise FileSystemError(f"Failed to create deployment guide: {e}")
-    
-    def _group_policies_by_category(self, policies: List[RecommendedPolicy], 
-                                  categories: List[str]) -> Dict[str, List[RecommendedPolicy]]:
+
+    def _group_policies_by_category(
+        self, policies: List[RecommendedPolicy], categories: List[str]
+    ) -> Dict[str, List[RecommendedPolicy]]:
         """Group policies by their assigned categories."""
         category_policies = {}
-        
+
         # Initialize categories
         for category in categories:
             category_policies[category] = []
-        
+
         # Group policies
         for policy in policies:
-            category = policy.category if policy.category else policy.original_policy.category
-            
+            category = (
+                policy.category if policy.category else policy.original_policy.category
+            )
+
             # Ensure category exists
             if category not in category_policies:
                 category_policies[category] = []
-            
+
             category_policies[category].append(policy)
-        
+
         # Remove empty categories
         return {k: v for k, v in category_policies.items() if v}
-    
-    def _create_policy_files(self, policy: RecommendedPolicy, category_dir: str, 
-                           validation_result: Optional[ValidationResult]) -> List[str]:
+
+    def _create_policy_files(
+        self,
+        policy: RecommendedPolicy,
+        category_dir: str,
+        validation_result: Optional[ValidationResult],
+    ) -> List[str]:
         """Create all files for a single policy."""
-        return self.create_policy_directory_structure(policy, category_dir, validation_result)
-    
-    def _create_recommendation_summary(self, recommendation: PolicyRecommendation, 
-                                     validation_results: List[ValidationResult]) -> str:
+        return self.create_policy_directory_structure(
+            policy, category_dir, validation_result
+        )
+
+    def _create_recommendation_summary(
+        self,
+        recommendation: PolicyRecommendation,
+        validation_results: List[ValidationResult],
+    ) -> str:
         """Create high-level recommendation summary."""
         try:
-            summary_file = os.path.join(self.output_directory, "recommendation-summary.yaml")
-            
+            summary_file = os.path.join(
+                self.output_directory, "recommendation-summary.yaml"
+            )
+
             # Calculate validation statistics
             validation_stats = {
                 "total": len(validation_results),
                 "passed": sum(1 for r in validation_results if r.passed),
                 "failed": sum(1 for r in validation_results if not r.passed),
-                "fixed": sum(1 for r in validation_results if r.fixed_content)
+                "fixed": sum(1 for r in validation_results if r.fixed_content),
             }
-            
+
             summary = {
                 "recommendation_metadata": {
                     "generated_at": recommendation.generation_timestamp.isoformat(),
                     "ai_model_used": recommendation.ai_model_used,
                     "total_policies": len(recommendation.recommended_policies),
-                    "categories": recommendation.categories
+                    "categories": recommendation.categories,
                 },
                 "cluster_information": {
                     "kubernetes_version": recommendation.cluster_info.version,
@@ -413,140 +484,169 @@ The following customizations were applied based on your requirements:
                     "third_party_controllers": [
                         {"name": ctrl.name, "type": ctrl.type.value}
                         for ctrl in recommendation.cluster_info.third_party_controllers
-                    ]
+                    ],
                 },
                 "governance_requirements": {
                     "compliance_frameworks": recommendation.requirements.compliance_frameworks,
                     "allowed_registries": recommendation.requirements.registries,
-                    "requirements_count": len(recommendation.requirements.answers)
+                    "requirements_count": len(recommendation.requirements.answers),
                 },
                 "validation_summary": validation_stats,
-                "policy_categories": {}
+                "policy_categories": {},
             }
-            
+
             # Add category breakdown
             category_policies = self._group_policies_by_category(
-                recommendation.recommended_policies, 
-                recommendation.categories
+                recommendation.recommended_policies, recommendation.categories
             )
-            
+
             for category, policies in category_policies.items():
                 category_validation = [
-                    r for r in validation_results 
+                    r
+                    for r in validation_results
                     if any(p.original_policy.name == r.policy_name for p in policies)
                 ]
-                
+
                 summary["policy_categories"][category] = {
                     "policy_count": len(policies),
-                    "validation_passed": sum(1 for r in category_validation if r.passed),
-                    "policies": [p.original_policy.name for p in policies]
+                    "validation_passed": sum(
+                        1 for r in category_validation if r.passed
+                    ),
+                    "policies": [p.original_policy.name for p in policies],
                 }
-            
-            with open(summary_file, 'w', encoding='utf-8') as f:
+
+            with open(summary_file, "w", encoding="utf-8") as f:
                 f.write(yaml.dump(summary, default_flow_style=False))
-            
+
             return summary_file
-            
+
         except Exception as e:
             self.logger.error(f"Error creating recommendation summary: {e}")
             raise FileSystemError(f"Failed to create recommendation summary: {e}")
-    
-    def _create_validation_report(self, validation_results: List[ValidationResult]) -> str:
+
+    def _create_validation_report(
+        self, validation_results: List[ValidationResult]
+    ) -> str:
         """Create detailed validation report."""
         return self.generate_validation_report(validation_results)
-    
-    def _create_category_index(self, category_policies: Dict[str, List[RecommendedPolicy]], 
-                             validation_results: List[ValidationResult]) -> str:
+
+    def _create_category_index(
+        self,
+        category_policies: Dict[str, List[RecommendedPolicy]],
+        validation_results: List[ValidationResult],
+    ) -> str:
         """Create index file for all categories."""
         try:
             index_file = os.path.join(self.output_directory, "category-index.yaml")
-            
-            index = {
-                "categories": {},
-                "generated_at": datetime.now().isoformat()
-            }
-            
+
+            index = {"categories": {}, "generated_at": datetime.now().isoformat()}
+
             for category, policies in category_policies.items():
                 category_validation = [
-                    r for r in validation_results 
+                    r
+                    for r in validation_results
                     if any(p.original_policy.name == r.policy_name for p in policies)
                 ]
-                
+
                 index["categories"][category] = {
                     "directory": self._sanitize_category_name(category),
                     "policy_count": len(policies),
-                    "validation_passed": sum(1 for r in category_validation if r.passed),
+                    "validation_passed": sum(
+                        1 for r in category_validation if r.passed
+                    ),
                     "description": self._get_category_description(category),
                     "policies": [
                         {
                             "name": p.original_policy.name,
-                            "description": p.original_policy.description[:100] + "..." if len(p.original_policy.description) > 100 else p.original_policy.description,
-                            "validation_passed": any(r.policy_name == p.original_policy.name and r.passed for r in validation_results)
+                            "description": (
+                                p.original_policy.description[:100] + "..."
+                                if len(p.original_policy.description) > 100
+                                else p.original_policy.description
+                            ),
+                            "validation_passed": any(
+                                r.policy_name == p.original_policy.name and r.passed
+                                for r in validation_results
+                            ),
                         }
                         for p in policies
-                    ]
+                    ],
                 }
-            
-            with open(index_file, 'w', encoding='utf-8') as f:
+
+            with open(index_file, "w", encoding="utf-8") as f:
                 f.write(yaml.dump(index, default_flow_style=False))
-            
+
             return index_file
-            
+
         except Exception as e:
             self.logger.error(f"Error creating category index: {e}")
             raise FileSystemError(f"Failed to create category index: {e}")
-    
+
     def _sanitize_category_name(self, category: str) -> str:
         """Sanitize category name for directory creation."""
-        return category.lower().replace(' ', '-').replace('_', '-')
-    
+        return category.lower().replace(" ", "-").replace("_", "-")
+
     def _sanitize_policy_name(self, policy_name: str) -> str:
         """Sanitize policy name for directory creation."""
-        return policy_name.lower().replace(' ', '-').replace('_', '-')
-    
+        return policy_name.lower().replace(" ", "-").replace("_", "-")
+
     def create_category_structure(self, categories: List[str]) -> None:
         """Create directory structure for categories (for test compatibility)."""
         try:
             os.makedirs(self.output_directory, exist_ok=True)
             for category in categories:
-                category_dir = os.path.join(self.output_directory, self._sanitize_category_name(category))
+                category_dir = os.path.join(
+                    self.output_directory, self._sanitize_category_name(category)
+                )
                 os.makedirs(category_dir, exist_ok=True)
-            self.logger.info(f"Created directory structure for {len(categories)} categories")
+            self.logger.info(
+                f"Created directory structure for {len(categories)} categories"
+            )
         except Exception as e:
             self.logger.error(f"Error creating category structure: {e}")
             raise FileSystemError(f"Failed to create category structure: {e}")
-    
-    def organize_policies_by_category(self, policies: List[RecommendedPolicy]) -> Dict[str, List[RecommendedPolicy]]:
+
+    def organize_policies_by_category(
+        self, policies: List[RecommendedPolicy]
+    ) -> Dict[str, List[RecommendedPolicy]]:
         """Organize policies by category (for test compatibility)."""
         organized = {}
         for policy in policies:
-            category = policy.category if policy.category else policy.original_policy.category
+            category = (
+                policy.category if policy.category else policy.original_policy.category
+            )
             if category not in organized:
                 organized[category] = []
             organized[category].append(policy)
         return organized
-    
-    def write_policy_files(self, organized_policies: Dict[str, List[RecommendedPolicy]]) -> List[str]:
+
+    def write_policy_files(
+        self, organized_policies: Dict[str, List[RecommendedPolicy]]
+    ) -> List[str]:
         """Write policy files to disk (for test compatibility)."""
         written_files = []
         try:
             for category, policies in organized_policies.items():
-                category_dir = os.path.join(self.output_directory, self._sanitize_category_name(category))
+                category_dir = os.path.join(
+                    self.output_directory, self._sanitize_category_name(category)
+                )
                 os.makedirs(category_dir, exist_ok=True)
-                
+
                 for policy in policies:
-                    policy_files = self.create_policy_directory_structure(policy, category_dir)
+                    policy_files = self.create_policy_directory_structure(
+                        policy, category_dir
+                    )
                     # Only return the main policy file (first file created)
                     if policy_files:
                         written_files.append(policy_files[0])
-            
+
             return written_files
         except Exception as e:
             self.logger.error(f"Error writing policy files: {e}")
             raise FileSystemError(f"Failed to write policy files: {e}")
-    
-    def generate_deployment_guide(self, policies: List[RecommendedPolicy], 
-                                categories: List[str]) -> str:
+
+    def generate_deployment_guide(
+        self, policies: List[RecommendedPolicy], categories: List[str]
+    ) -> str:
         """Generate deployment guide (for test compatibility)."""
         try:
             guide_content = f"""# AEGIS Policy Deployment Guide
@@ -557,12 +657,18 @@ This guide contains {len(policies)} recommended Kyverno policies organized into 
 ## Categories
 """
             for category in categories:
-                category_policies = [p for p in policies if (p.category or p.original_policy.category) == category]
-                guide_content += f"\n### {category.replace('-', ' ').title()} ({category})\n"
+                category_policies = [
+                    p
+                    for p in policies
+                    if (p.category or p.original_policy.category) == category
+                ]
+                guide_content += (
+                    f"\n### {category.replace('-', ' ').title()} ({category})\n"
+                )
                 guide_content += f"- Policy Count: {len(category_policies)}\n"
                 for policy in category_policies:
                     guide_content += f"  - {policy.original_policy.name}\n"
-            
+
             guide_content += """
 ## Policies
 
@@ -571,7 +677,7 @@ The following policies have been selected for your cluster:
 """
             for policy in policies:
                 guide_content += f"- **{policy.original_policy.name}**: {policy.original_policy.description}\n"
-            
+
             guide_content += """
 ## Deployment Instructions
 1. Review each policy before applying
@@ -579,97 +685,109 @@ The following policies have been selected for your cluster:
 3. Apply policies in audit mode initially
 4. Monitor for violations before switching to enforce mode
 """
-            
+
             return guide_content
         except Exception as e:
             self.logger.error(f"Error generating deployment guide: {e}")
             raise FileSystemError(f"Failed to generate deployment guide: {e}")
-    
-    def generate_summary_report(self, policies: List[RecommendedPolicy], 
-                              categories: List[str]) -> Dict[str, Any]:
+
+    def generate_summary_report(
+        self, policies: List[RecommendedPolicy], categories: List[str]
+    ) -> Dict[str, Any]:
         """Generate summary report (for test compatibility)."""
         try:
             organized = self.organize_policies_by_category(policies)
-            
+
             summary = {
                 "total_policies": len(policies),
                 "categories": categories,
                 "validation_summary": {
                     "total": len(policies),
-                    "passed": len(policies),  # Default assumption for test compatibility
-                    "failed": 0
+                    "passed": len(
+                        policies
+                    ),  # Default assumption for test compatibility
+                    "failed": 0,
                 },
                 "customizations_summary": {
-                    "total_customizations": sum(len(p.customizations_applied) for p in policies),
-                    "common_customizations": list(set(
-                        customization for p in policies for customization in p.customizations_applied
-                    ))
+                    "total_customizations": sum(
+                        len(p.customizations_applied) for p in policies
+                    ),
+                    "common_customizations": list(
+                        set(
+                            customization
+                            for p in policies
+                            for customization in p.customizations_applied
+                        )
+                    ),
                 },
                 "policies_by_category": categories,
-                "category_breakdown": {}
+                "category_breakdown": {},
             }
-            
+
             for category in categories:
                 category_policies = organized.get(category, [])
                 summary["category_breakdown"][category] = {
                     "policy_count": len(category_policies),
-                    "policies": [p.original_policy.name for p in category_policies]
+                    "policies": [p.original_policy.name for p in category_policies],
                 }
-            
+
             return summary
         except Exception as e:
             self.logger.error(f"Error generating summary report: {e}")
             raise FileSystemError(f"Failed to generate summary report: {e}")
-    
-    def write_deployment_guide(self, policies: List[RecommendedPolicy], 
-                             categories: List[str]) -> str:
+
+    def write_deployment_guide(
+        self, policies: List[RecommendedPolicy], categories: List[str]
+    ) -> str:
         """Write deployment guide to file (for test compatibility)."""
         try:
             guide_content = self.generate_deployment_guide(policies, categories)
             guide_file = os.path.join(self.output_directory, "DEPLOYMENT_GUIDE.md")
-            
+
             os.makedirs(self.output_directory, exist_ok=True)
-            with open(guide_file, 'w', encoding='utf-8') as f:
+            with open(guide_file, "w", encoding="utf-8") as f:
                 f.write(guide_content)
-            
+
             return guide_file
         except Exception as e:
             self.logger.error(f"Error writing deployment guide: {e}")
             raise FileSystemError(f"Failed to write deployment guide: {e}")
-    
-    def write_summary_report(self, policies: List[RecommendedPolicy], 
-                           categories: List[str]) -> str:
+
+    def write_summary_report(
+        self, policies: List[RecommendedPolicy], categories: List[str]
+    ) -> str:
         """Write summary report to file (for test compatibility)."""
         try:
             summary = self.generate_summary_report(policies, categories)
             summary_file = os.path.join(self.output_directory, "SUMMARY.yaml")
-            
+
             os.makedirs(self.output_directory, exist_ok=True)
-            with open(summary_file, 'w', encoding='utf-8') as f:
+            with open(summary_file, "w", encoding="utf-8") as f:
                 yaml.dump(summary, f, default_flow_style=False)
-            
+
             return summary_file
         except Exception as e:
             self.logger.error(f"Error writing summary report: {e}")
             raise FileSystemError(f"Failed to write summary report: {e}")
-    
-    def create_complete_output(self, policies: List[RecommendedPolicy], 
-                             categories: List[str]) -> Dict[str, Any]:
+
+    def create_complete_output(
+        self, policies: List[RecommendedPolicy], categories: List[str]
+    ) -> Dict[str, Any]:
         """Create complete organized output (for test compatibility)."""
         try:
             # Create category structure
             self.create_category_structure(categories)
-            
+
             # Organize policies
             organized = self.organize_policies_by_category(policies)
-            
+
             # Write policy files
             written_files = self.write_policy_files(organized)
-            
+
             # Generate reports
             deployment_guide = self.write_deployment_guide(policies, categories)
             summary_report = self.write_summary_report(policies, categories)
-            
+
             return {
                 "output_directory": self.output_directory,
                 "organized_policies": organized,
@@ -677,37 +795,44 @@ The following policies have been selected for your cluster:
                 "deployment_guide": deployment_guide,
                 "summary_report": summary_report,
                 "categories_created": categories,
-                "policies_written": policies
+                "policies_written": policies,
             }
         except Exception as e:
             self.logger.error(f"Error creating complete output: {e}")
             raise FileSystemError(f"Failed to create complete output: {e}")
-    
+
     def _ensure_directory_exists(self, directory: str) -> None:
         """Ensure directory exists (for test compatibility)."""
         os.makedirs(directory, exist_ok=True)
-    
+
     def _sanitize_filename(self, filename: str) -> str:
         """Sanitize filename for file creation (for test compatibility)."""
-        return filename.lower().replace(' ', '-').replace('_', '-').replace('/', '-').replace('\\', '-').replace(':', '-')
-    
+        return (
+            filename.lower()
+            .replace(" ", "-")
+            .replace("_", "-")
+            .replace("/", "-")
+            .replace("\\", "-")
+            .replace(":", "-")
+        )
+
     def _generate_sample_resource(self, policy: RecommendedPolicy) -> str:
         """Generate sample resource for testing the policy."""
         try:
             # Parse policy to understand what resources it targets
             policy_data = yaml.safe_load(policy.customized_content)
             policy_name = policy.original_policy.name
-            
+
             # Special handling for specific policies
             if "service-mesh-require-run-as-nonroot" in policy_name:
                 return self._generate_service_mesh_test_resources()
             elif "disallow-default-namespace" in policy_name:
                 return self._generate_namespace_test_resources()
-            
+
             # Extract resource kinds from policy rules
             resource_kinds = set()
             rules = policy_data.get("spec", {}).get("rules", [])
-            
+
             for rule in rules:
                 match = rule.get("match", {})
                 if "any" in match:
@@ -718,18 +843,18 @@ The following policies have been selected for your cluster:
                 elif "resources" in match:
                     kinds = match["resources"].get("kinds", [])
                     resource_kinds.update(kinds)
-            
+
             # Generate sample resource for the first kind found
             if resource_kinds:
                 kind = list(resource_kinds)[0]
                 return self._generate_resource_template(kind)
             else:
                 return self._generate_resource_template("Pod")
-                
+
         except Exception as e:
             self.logger.error(f"Error generating sample resource: {e}")
             return self._generate_resource_template("Pod")
-    
+
     def _generate_service_mesh_test_resources(self) -> str:
         """Generate test resources for service mesh policies."""
         return """apiVersion: v1
@@ -776,7 +901,7 @@ spec:
         memory: "128Mi"
         cpu: "500m"
 """
-    
+
     def _generate_namespace_test_resources(self) -> str:
         """Generate test resources for namespace policies."""
         return """apiVersion: v1
@@ -846,7 +971,7 @@ spec:
         name: busybox
         command: ["sleep", "9999"]
 """
-    
+
     def _generate_resource_template(self, kind: str) -> str:
         """Generate resource template for specific kind."""
         templates = {
@@ -927,13 +1052,14 @@ spec:
             name: test-service
             port:
               number: 80
-"""
+""",
         }
-        
+
         return templates.get(kind, templates["Pod"])
-    
-    def _create_policy_metadata(self, policy: RecommendedPolicy, 
-                              validation_result: Optional[ValidationResult]) -> Dict[str, Any]:
+
+    def _create_policy_metadata(
+        self, policy: RecommendedPolicy, validation_result: Optional[ValidationResult]
+    ) -> Dict[str, Any]:
         """Create metadata for a policy."""
         metadata = {
             "policy_name": policy.original_policy.name,
@@ -946,17 +1072,25 @@ spec:
                 "status": validation_result.passed if validation_result else "unknown",
                 "errors": validation_result.errors if validation_result else [],
                 "warnings": validation_result.warnings if validation_result else [],
-                "automatically_fixed": bool(validation_result.fixed_content) if validation_result else False
+                "automatically_fixed": (
+                    bool(validation_result.fixed_content)
+                    if validation_result
+                    else False
+                ),
             },
             "files": {
                 "policy": os.path.basename(policy.original_policy.relative_path),
-                "test": "kyverno-test.yaml" if (policy.test_content or policy.original_policy.test_directory) else None,
-                "sample_resource": "resource.yaml"
-            }
+                "test": (
+                    "kyverno-test.yaml"
+                    if (policy.test_content or policy.original_policy.test_directory)
+                    else None
+                ),
+                "sample_resource": "resource.yaml",
+            },
         }
-        
+
         return metadata
-    
+
     def _get_category_description(self, category: str) -> str:
         """Get description for a category."""
         descriptions = {
@@ -967,28 +1101,40 @@ spec:
             "resource-management": "Resource allocation and management policies",
             "workload-security": "Workload-specific security and runtime policies",
             "storage-management": "Storage and persistent volume management policies",
-            "security-and-compliance": "Combined security and compliance policies"
+            "security-and-compliance": "Combined security and compliance policies",
         }
-        
-        return descriptions.get(category, f"Policies related to {category.replace('-', ' ')}")
-    
-    def _generate_validation_recommendations(self, validation_results: List[ValidationResult]) -> List[str]:
+
+        return descriptions.get(
+            category, f"Policies related to {category.replace('-', ' ')}"
+        )
+
+    def _generate_validation_recommendations(
+        self, validation_results: List[ValidationResult]
+    ) -> List[str]:
         """Generate recommendations based on validation results."""
         recommendations = []
-        
+
         failed_count = sum(1 for r in validation_results if not r.passed)
         fixed_count = sum(1 for r in validation_results if r.fixed_content)
-        
+
         if failed_count > 0:
-            recommendations.append(f"{failed_count} policies failed validation - review errors before deployment")
-        
+            recommendations.append(
+                f"{failed_count} policies failed validation - review errors before deployment"
+            )
+
         if fixed_count > 0:
-            recommendations.append(f"{fixed_count} policies were automatically fixed - review changes before deployment")
-        
+            recommendations.append(
+                f"{fixed_count} policies were automatically fixed - review changes before deployment"
+            )
+
         if failed_count == 0:
-            recommendations.append("All policies passed validation - ready for deployment")
-        
+            recommendations.append(
+                "All policies passed validation - ready for deployment"
+            )
+
         recommendations.append("Test policies in audit mode before enforcing")
-        recommendations.append("Review policy customizations to ensure they match your requirements")
-        
+        recommendations.append(
+            "Review policy customizations to ensure they match your requirements"
+        )
+
         return recommendations

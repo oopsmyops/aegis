@@ -185,8 +185,10 @@ kubeconfig*
 test-output*/
 test_results/
 coverage_reports/
+bandit-report.json
 
 # Temporary files
+github-actions-issues.txt
 *.tmp
 *.temp
 *.swp

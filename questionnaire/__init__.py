@@ -9,9 +9,9 @@ from .questionnaire_runner import QuestionnaireRunner
 from .yaml_updater import YamlUpdater
 
 __all__ = [
-    'QuestionBank',
-    'Question', 
-    'FollowUpType',
-    'QuestionnaireRunner',
-    'YamlUpdater'
+    "QuestionBank",
+    "Question",
+    "FollowUpType",
+    "QuestionnaireRunner",
+    "YamlUpdater",
 ]

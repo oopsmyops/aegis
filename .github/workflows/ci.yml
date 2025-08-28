@@ -54,13 +54,13 @@ jobs:
     - name: Lint with flake8
       run: |
         # Stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=venv,build,dist
         # Exit-zero treats all errors as warnings
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics --exclude=venv,build,dist
 
     - name: Check code formatting with black
       run: |
-        black --check --diff .
+        black --check --diff . --exclude="/(venv|build|dist)/"
 
     - name: Type checking with mypy
       run: |
@@ -69,7 +69,7 @@ jobs:
 
     - name: Run unit tests
       run: |
-        python -m pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing
+        python -m pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing --ignore=venv
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -120,7 +120,9 @@ jobs:
           --hidden-import=yaml \
           --hidden-import=click \
           --console \
-          aegis/cli/main.py
+          --workpath ./build \
+          --distpath ./dist \
+          cli/main.py
 
     - name: Build binary (Windows)
       if: matrix.os == 'windows-latest'
@@ -139,7 +141,9 @@ jobs:
           --hidden-import=yaml `
           --hidden-import=click `
           --console `
-          aegis/cli/main.py
+          --workpath ./build `
+          --distpath ./dist `
+          cli/main.py
 
     - name: Test binary (Linux/macOS)
       if: matrix.os != 'windows-latest'
@@ -177,8 +181,8 @@ jobs:
 
     - name: Run bandit security scan
       run: |
-        bandit -r . -f json -o bandit-report.json || true
-        bandit -r . -ll
+        bandit -r . -f json -o bandit-report.json --exclude ./venv,./build,./dist || true
+        bandit -r . -ll --exclude ./venv,./build,./dist
 
     - name: Upload security reports
       uses: actions/upload-artifact@v4

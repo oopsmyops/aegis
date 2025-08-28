@@ -11,6 +11,7 @@ from enum import Enum
 
 class ControllerType(Enum):
     """Types of third-party controllers."""
+
     GITOPS = "gitops"
     SERVICE_MESH = "service-mesh"
     INGRESS = "ingress"
@@ -19,12 +20,10 @@ class ControllerType(Enum):
     SECURITY = "security"
 
 
-
-
-
 @dataclass
 class ThirdPartyController:
     """Represents a third-party controller in the cluster."""
+
     name: str
     type: ControllerType
     namespace: str
@@ -35,6 +34,7 @@ class ThirdPartyController:
 @dataclass
 class ClusterInfo:
     """Comprehensive cluster information model."""
+
     version: str
     managed_service: Optional[str] = None  # EKS, AKS, GKE, etc.
     node_count: int = 0
@@ -49,6 +49,7 @@ class ClusterInfo:
 @dataclass
 class PolicyCatalogEntry:
     """Represents a policy in the catalog."""
+
     name: str
     category: str
     description: str
@@ -61,15 +62,18 @@ class PolicyCatalogEntry:
 @dataclass
 class PolicyIndex:
     """Index of all policies in the catalog."""
+
     categories: Dict[str, List[PolicyCatalogEntry]] = field(default_factory=dict)
     total_policies: int = 0
     last_updated: datetime = field(default_factory=datetime.now)
-    
-    def get_policies_by_category(self, category: str, limit: Optional[int] = None) -> List[PolicyCatalogEntry]:
+
+    def get_policies_by_category(
+        self, category: str, limit: Optional[int] = None
+    ) -> List[PolicyCatalogEntry]:
         """Get policies for a category."""
         if category not in self.categories:
             return []
-        
+
         policies = self.categories[category]
         if limit:
             return policies[:limit]
@@ -79,6 +83,7 @@ class PolicyIndex:
 @dataclass
 class RequirementAnswer:
     """Represents an answer to a questionnaire question."""
+
     question_id: str
     answer: bool
     follow_up_data: Optional[Dict[str, Any]] = None
@@ -88,6 +93,7 @@ class RequirementAnswer:
 @dataclass
 class GovernanceRequirements:
     """Collection of governance requirements from questionnaire."""
+
     answers: List[RequirementAnswer] = field(default_factory=list)
     registries: List[str] = field(default_factory=list)
     compliance_frameworks: List[str] = field(default_factory=list)
@@ -98,6 +104,7 @@ class GovernanceRequirements:
 @dataclass
 class RecommendedPolicy:
     """Represents a recommended policy with customizations."""
+
     original_policy: PolicyCatalogEntry
     customized_content: str
     test_content: Optional[str] = None
@@ -109,6 +116,7 @@ class RecommendedPolicy:
 @dataclass
 class PolicyRecommendation:
     """Complete policy recommendation result."""
+
     cluster_info: ClusterInfo
     requirements: GovernanceRequirements
     recommended_policies: List[RecommendedPolicy] = field(default_factory=list)

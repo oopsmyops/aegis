@@ -2,7 +2,13 @@
 Sample policy fixtures for testing.
 """
 
-from models import PolicyCatalogEntry, RecommendedPolicy, ClusterInfo, GovernanceRequirements, RequirementAnswer
+from models import (
+    PolicyCatalogEntry,
+    RecommendedPolicy,
+    ClusterInfo,
+    GovernanceRequirements,
+    RequirementAnswer,
+)
 from datetime import datetime
 
 
@@ -142,7 +148,7 @@ def create_sample_policy_catalog_entries():
             relative_path="best-practices/require-pod-resources/require-pod-resources.yaml",
             test_directory="best-practices/require-pod-resources",
             source_repo="https://github.com/kyverno/policies",
-            tags=["resources", "limits", "requests", "best-practices"]
+            tags=["resources", "limits", "requests", "best-practices"],
         ),
         PolicyCatalogEntry(
             name="restrict-image-registries",
@@ -151,7 +157,7 @@ def create_sample_policy_catalog_entries():
             relative_path="security/restrict-image-registries/restrict-image-registries.yaml",
             test_directory="security/restrict-image-registries",
             source_repo="https://github.com/kyverno/policies",
-            tags=["registry", "images", "security"]
+            tags=["registry", "images", "security"],
         ),
         PolicyCatalogEntry(
             name="disallow-latest-tag",
@@ -160,7 +166,7 @@ def create_sample_policy_catalog_entries():
             relative_path="best-practices/disallow-latest-tag/disallow-latest-tag.yaml",
             test_directory="best-practices/disallow-latest-tag",
             source_repo="https://github.com/kyverno/policies",
-            tags=["images", "tags", "best-practices"]
+            tags=["images", "tags", "best-practices"],
         ),
         PolicyCatalogEntry(
             name="require-pod-probes",
@@ -169,7 +175,7 @@ def create_sample_policy_catalog_entries():
             relative_path="best-practices/require-pod-probes/require-pod-probes.yaml",
             test_directory="best-practices/require-pod-probes",
             source_repo="https://github.com/kyverno/policies",
-            tags=["probes", "health", "best-practices"]
+            tags=["probes", "health", "best-practices"],
         ),
         PolicyCatalogEntry(
             name="restrict-automount-sa-token",
@@ -178,15 +184,15 @@ def create_sample_policy_catalog_entries():
             relative_path="security/restrict-automount-sa-token/restrict-automount-sa-token.yaml",
             test_directory="security/restrict-automount-sa-token",
             source_repo="https://github.com/kyverno/policies",
-            tags=["serviceaccount", "token", "security"]
-        )
+            tags=["serviceaccount", "token", "security"],
+        ),
     ]
 
 
 def create_sample_recommended_policies():
     """Create sample RecommendedPolicy objects for testing."""
     catalog_entries = create_sample_policy_catalog_entries()
-    
+
     return [
         RecommendedPolicy(
             original_policy=catalog_entries[0],
@@ -194,7 +200,7 @@ def create_sample_recommended_policies():
             test_content=SAMPLE_TEST_YAML,
             category="resource-management",
             validation_status="passed",
-            customizations_applied=["label_addition"]
+            customizations_applied=["label_addition"],
         ),
         RecommendedPolicy(
             original_policy=catalog_entries[1],
@@ -202,15 +208,15 @@ def create_sample_recommended_policies():
             test_content=SAMPLE_TEST_YAML,
             category="security-and-compliance",
             validation_status="passed",
-            customizations_applied=["registry_replacement"]
-        )
+            customizations_applied=["registry_replacement"],
+        ),
     ]
 
 
 def create_sample_cluster_info():
     """Create sample ClusterInfo object for testing."""
     from models import ThirdPartyController, ControllerType
-    
+
     return ClusterInfo(
         version="1.28.0",
         managed_service="EKS",
@@ -222,22 +228,22 @@ def create_sample_cluster_info():
                 type=ControllerType.INGRESS,
                 namespace="ingress-nginx",
                 version="1.8.1",
-                configuration={"replicas": 2}
+                configuration={"replicas": 2},
             ),
             ThirdPartyController(
                 name="argocd-server",
                 type=ControllerType.GITOPS,
                 namespace="argocd",
                 version="2.8.0",
-                configuration={"ha": True}
-            )
+                configuration={"ha": True},
+            ),
         ],
         security_features={
             "rbac_enabled": True,
             "pod_security_standards": True,
-            "network_policies": False
+            "network_policies": False,
         },
-        compliance_frameworks=["CIS", "NIST"]
+        compliance_frameworks=["CIS", "NIST"],
     )
 
 
@@ -249,34 +255,34 @@ def create_sample_governance_requirements():
                 question_id="img_registry_enforcement",
                 answer=True,
                 follow_up_data={"registries": ["docker.io", "gcr.io"]},
-                category="image_security"
+                category="image_security",
             ),
             RequirementAnswer(
                 question_id="pod_security_standards",
                 answer=True,
-                category="security_context"
+                category="security_context",
             ),
             RequirementAnswer(
                 question_id="resource_quotas",
                 answer=True,
-                category="resource_management"
+                category="resource_management",
             ),
             RequirementAnswer(
                 question_id="network_policies",
                 answer=False,
-                category="network_security"
+                category="network_security",
             ),
             RequirementAnswer(
                 question_id="compliance_frameworks",
                 answer=True,
                 follow_up_data={"frameworks": ["CIS", "NIST"]},
-                category="compliance"
-            )
+                category="compliance",
+            ),
         ],
         registries=["docker.io", "gcr.io"],
         compliance_frameworks=["CIS", "NIST"],
         custom_labels={"env": "production", "team": "platform"},
-        collection_timestamp=datetime(2024, 1, 1, 12, 0, 0)
+        collection_timestamp=datetime(2024, 1, 1, 12, 0, 0),
     )
 
 
@@ -286,14 +292,14 @@ def create_sample_cluster_discovery_yaml():
         "discovery_metadata": {
             "tool": "AEGIS",
             "version": "1.0.0",
-            "timestamp": "2024-01-01T12:00:00Z"
+            "timestamp": "2024-01-01T12:00:00Z",
         },
         "cluster_info": {
             "kubernetes_version": "1.28.0",
             "node_count": 3,
             "namespace_count": 12,
             "total_pods": 45,
-            "total_services": 15
+            "total_services": 15,
         },
         "managed_service": "EKS",
         "third_party_controllers": [
@@ -302,29 +308,32 @@ def create_sample_cluster_discovery_yaml():
                 "namespace": "ingress-nginx",
                 "type": "ingress",
                 "kind": "deployment",
-                "version": "1.8.1"
+                "version": "1.8.1",
             },
             {
                 "name": "argocd-server",
                 "namespace": "argocd",
                 "type": "gitops",
                 "kind": "deployment",
-                "version": "2.8.0"
-            }
+                "version": "2.8.0",
+            },
         ],
         "resources": {
             "deployments": 12,
             "statefulsets": 3,
             "daemonsets": 5,
             "configmaps": 25,
-            "secrets": 18
+            "secrets": 18,
         },
         "security_features": {
             "rbac_enabled": True,
             "pod_security_standards": True,
             "network_policies": False,
-            "admission_controllers": ["ValidatingAdmissionWebhook", "MutatingAdmissionWebhook"]
-        }
+            "admission_controllers": [
+                "ValidatingAdmissionWebhook",
+                "MutatingAdmissionWebhook",
+            ],
+        },
     }
 
 
@@ -339,10 +348,10 @@ def create_sample_governance_requirements_yaml():
                 "no_answers": 7,
                 "categories": [
                     "image_security",
-                    "resource_management", 
+                    "resource_management",
                     "security_context",
-                    "compliance"
-                ]
+                    "compliance",
+                ],
             },
             "answers": [
                 {
@@ -350,31 +359,26 @@ def create_sample_governance_requirements_yaml():
                     "question": "Do you want to enforce allowed image registries?",
                     "answer": True,
                     "category": "image_security",
-                    "follow_up_data": {
-                        "registries": ["docker.io", "gcr.io"]
-                    }
+                    "follow_up_data": {"registries": ["docker.io", "gcr.io"]},
                 },
                 {
                     "question_id": "pod_security_standards",
                     "question": "Do you want to enforce Pod Security Standards?",
                     "answer": True,
-                    "category": "security_context"
+                    "category": "security_context",
                 },
                 {
                     "question_id": "resource_quotas",
                     "question": "Do you want to enforce resource quotas and limits?",
                     "answer": True,
-                    "category": "resource_management"
-                }
+                    "category": "resource_management",
+                },
             ],
             "configurations": {
                 "allowed_registries": ["docker.io", "gcr.io"],
                 "compliance_frameworks": ["CIS", "NIST"],
-                "required_labels": {
-                    "env": "production",
-                    "team": "platform"
-                }
-            }
+                "required_labels": {"env": "production", "team": "platform"},
+            },
         }
     }
 
@@ -407,7 +411,7 @@ spec:
           containers:
           - name: "*"
             image: "!*:latest"
-"""
+""",
     },
     "security": {
         "restrict-image-registries": SAMPLE_SECURITY_POLICY_YAML,
@@ -433,8 +437,8 @@ spec:
       pattern:
         spec:
           automountServiceAccountToken: "false"
-"""
-    }
+""",
+    },
 }
 
 
@@ -472,5 +476,5 @@ spec:
       requests:
         memory: "128Mi"
         cpu: "100m"
-"""
+""",
 }
