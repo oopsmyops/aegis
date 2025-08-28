@@ -76,7 +76,11 @@ class TestAIPerformance:
         """Benchmark policy selection logic (without AI calls)."""
         # Create mock bedrock client
         mock_bedrock_client = Mock(spec=BedrockClient)
-        selector = AIPolicySelector(mock_bedrock_client)
+        selector = AIPolicySelector(
+            bedrock_client=mock_bedrock_client,
+            policy_catalog_path="./test-catalog",
+            output_directory="./test-output",
+        )
 
         # Mock policy data
         mock_policies = [

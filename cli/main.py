@@ -48,6 +48,16 @@ def cli(ctx: click.Context, config: Optional[str], verbose: bool, debug: bool):
     ctx.obj["verbose"] = verbose
 
     # Initialize configuration with better error handling
+    # Skip config loading for help and version commands
+    if (
+        ctx.invoked_subcommand in ["version", "help"]
+        or "--help" in sys.argv
+        or "-h" in sys.argv
+    ):
+        ctx.obj["config"] = {}
+        ctx.obj["config_manager"] = None
+        return
+
     try:
         config_manager = ConfigurationManager(config)
         ctx.obj["config"] = config_manager.load_config()
@@ -1698,6 +1708,13 @@ def health(ctx: click.Context):
 
     if not health_status:
         sys.exit(1)
+
+
+@cli.command()
+def version():
+    """Show AEGIS version information."""
+    click.echo("AEGIS CLI v1.0.0")
+    click.echo("AI Enabled Governance Insights & Suggestions for Kubernetes")
 
 
 def main():
