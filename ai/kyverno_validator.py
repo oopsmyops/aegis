@@ -1722,8 +1722,9 @@ TEST RESOURCES:
             try:
                 policy_data = yaml.safe_load(policy_content)
                 policy_name = policy_data.get("metadata", {}).get("name", "temp-policy")
-            except:
-                pass
+            except yaml.YAMLError:
+                # If YAML parsing fails, use default name
+                policy_name = "temp-policy"
 
             # Create minimal policy entry
             catalog_entry = PolicyCatalogEntry(

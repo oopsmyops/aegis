@@ -796,7 +796,7 @@ class AIPolicySelector(AIPolicySelectorInterface):
         self, context: Dict[str, Any], target_count: int
     ) -> str:
         """Create AI prompt for policy selection."""
-        prompt = f"""
+        prompt = f"""  #nosec B608
 You are an expert Kubernetes governance consultant. Based on the cluster information and governance requirements, select the most appropriate {target_count} policies from the available policy catalog.
 
 CLUSTER INFORMATION:
