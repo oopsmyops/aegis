@@ -350,7 +350,7 @@ jobs:
         fi
         
         # Test version command (may not be implemented)
-        if "${BINARY_PATH}" --version > /dev/null 2>&1; then
+        if "${BINARY_PATH}" version > /dev/null 2>&1; then
           echo "✅ Version command test passed"
         else
           echo "⚠️ Version command not available (this is OK)"
@@ -376,7 +376,7 @@ jobs:
         
         # Test version command (may not be implemented)
         try {
-          & $binaryPath --version | Out-Null
+          & $binaryPath version | Out-Null
           Write-Host "✅ Version command test passed"
         } catch {
           Write-Host "⚠️ Version command not available (this is OK)"
