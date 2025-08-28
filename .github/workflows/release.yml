@@ -399,9 +399,20 @@ jobs:
           exit 1
         fi
         
-        # Create checksums
-        sha256sum "${BINARY_FILE}" > "${BINARY_FILE}.sha256"
-        md5sum "${BINARY_FILE}" > "${BINARY_FILE}.md5"
+        # Create checksums - use platform-appropriate commands
+        if [ "${{ matrix.os }}" = "macos" ]; then
+          # macOS uses different commands
+          shasum -a 256 "${BINARY_FILE}" > "${BINARY_FILE}.sha256"
+          md5 -r "${BINARY_FILE}" | awk '{print $1 "  " $2}' > "${BINARY_FILE}.md5"
+          # Get file size for macOS
+          FILE_SIZE=$(stat -f%z "${BINARY_FILE}")
+        else
+          # Linux and Windows (in bash) use standard commands
+          sha256sum "${BINARY_FILE}" > "${BINARY_FILE}.sha256"
+          md5sum "${BINARY_FILE}" > "${BINARY_FILE}.md5"
+          # Get file size for Linux/Windows
+          FILE_SIZE=$(stat -c%s "${BINARY_FILE}")
+        fi
         
         # Create metadata file
         cat > "${BINARY_FILE}.info" << EOF
@@ -409,7 +420,7 @@ jobs:
         Version: ${{ env.VERSION }}
         Platform: ${{ matrix.os }}-${{ matrix.arch }}
         Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-        Size: $(stat -c%s "${BINARY_FILE}") bytes
+        Size: ${FILE_SIZE} bytes
         SHA256: $(cat "${BINARY_FILE}.sha256" | cut -d' ' -f1)
         MD5: $(cat "${BINARY_FILE}.md5" | cut -d' ' -f1)
         EOF
@@ -572,12 +583,23 @@ jobs:
         
         All binaries include SHA256 and MD5 checksums for verification:
         
+        ### Linux/Windows
         ```bash
         # Verify SHA256 checksum
         sha256sum -c aegis-linux-x64.sha256
         
         # Verify MD5 checksum  
         md5sum -c aegis-linux-x64.md5
+        ```
+        
+        ### macOS
+        ```bash
+        # Verify SHA256 checksum
+        shasum -a 256 -c aegis-macos-x64.sha256
+        
+        # Verify MD5 checksum (manual verification)
+        md5 aegis-macos-x64
+        cat aegis-macos-x64.md5
         ```
         
         ## 📋 Requirements
