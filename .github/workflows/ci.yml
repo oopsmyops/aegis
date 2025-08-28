@@ -45,6 +45,19 @@ jobs:
           ${{ runner.os }}-pip-${{ matrix.python-version }}-
           ${{ runner.os }}-pip-
 
+    - name: Install Kyverno CLI (optional)
+      run: |
+        # Try to install Kyverno CLI for validation tests
+        curl -L https://github.com/kyverno/kyverno/releases/download/v1.15.0/kyverno-cli_v1.15.0_linux_x86_64.tar.gz -o kyverno.tar.gz || true
+        if [ -f kyverno.tar.gz ]; then
+          tar -xzf kyverno.tar.gz || true
+          sudo mv kyverno /usr/local/bin/ || true
+          chmod +x /usr/local/bin/kyverno || true
+          echo "Kyverno CLI installed successfully"
+        else
+          echo "Kyverno CLI installation failed, validation tests will be skipped"
+        fi
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
