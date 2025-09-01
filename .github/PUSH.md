@@ -39,10 +39,6 @@ python -m pytest tests/ -v --tb=short
 python -m pytest tests/integration/ -v --tb=short
 ```
 
-### 8. Run Performance Benchmarks
-```bash
-python -m pytest benchmarks/ -v --benchmark-only --benchmark-json=benchmark-results.json
-```
 
 ## Pre-commit Hook Setup
 

@@ -14,7 +14,7 @@ class FollowUpType(Enum):
     REGISTRY_LIST = "registry_list"
     COMPLIANCE_FRAMEWORKS = "compliance_frameworks"
     CUSTOM_LABELS = "custom_labels"
-    RESOURCE_LIMITS = "resource_limits"
+    # RESOURCE_LIMITS = "resource_limits"
     NONE = "none"
 
 
@@ -63,8 +63,13 @@ class QuestionBank:
             ),
             # Resource Management Questions (4)
             Question(
-                id="res_limits_required",
-                text="Do you want to require resource limits (CPU/memory) for all containers?",
+                id="cpu_limits_required",
+                text="Do you want to require CPU limits for all containers?",
+                category="resource_management",
+            ),
+            Question(
+                id="mem_limits_required",
+                text="Do you want to require memory limits for all containers?",
                 category="resource_management",
             ),
             Question(
@@ -77,13 +82,13 @@ class QuestionBank:
                 text="Do you want to enforce namespace resource quotas?",
                 category="resource_management",
             ),
-            Question(
-                id="res_limit_ranges",
-                text="Do you want to enforce limit ranges for pods and containers?",
-                category="resource_management",
-                follow_up_type=FollowUpType.RESOURCE_LIMITS,
-                follow_up_prompt="Please specify resource limits (e.g., cpu=500m,memory=512Mi,storage=1Gi):",
-            ),
+            # Question(
+            #     id="res_limit_ranges",
+            #     text="Do you want to enforce limit ranges for pods and containers?",
+            #     category="resource_management",
+            #     follow_up_type=FollowUpType.RESOURCE_LIMITS,
+            #     follow_up_prompt="Please specify resource limits (e.g., cpu=500m,memory=512Mi,storage=1Gi):",
+            # ),
             # Security Context Questions (4)
             Question(
                 id="sec_non_root_required",
@@ -134,7 +139,7 @@ class QuestionBank:
                 text="Do you want to enforce mandatory labeling standards?",
                 category="compliance",
                 follow_up_type=FollowUpType.CUSTOM_LABELS,
-                follow_up_prompt="Please enter required labels in key=value format (comma-separated):",
+                follow_up_prompt="Please enter required keys for labels (comma-separated):",
             ),
             Question(
                 id="comp_pod_disruption_budgets",

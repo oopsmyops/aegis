@@ -1,55 +1,45 @@
-# AEGIS Configuration File
-# Configuration for AI Enabled Governance Insights & Suggestions
-
 ai:
+  error_handling:
+    emergency_selection: true
+    enable_fallbacks: true
+    fallback_models:
+    - anthropic.claude-3-haiku-20240307-v1:0
+    - amazon.nova-lite-v1:0
+    - anthropic.claude-instant-v1
+    max_retry_attempts: 3
   max_tokens: 4000
   model: amazon.nova-pro-v1:0
   policy_count:
-    total_target: 20                 # Target number of policies to recommend
+    total_target: 20
   provider: aws-bedrock
   region: us-east-1
   temperature: 0.1
-
   two_phase_selection:
-    enabled: true                    # Enable Two-Phase selection
-    phase_one_candidates: 150        # Max candidates from Phase 1 filtering
-    # phase_two_target uses policy_count.total_target value
-    phase_one_max_tokens: 2000       # Token limit for Phase 1 filtering
-    phase_one_temperature: 0.1       # Temperature for Phase 1 filtering
-    phase_two_max_tokens: 4000       # Token limit for Phase 2 detailed selection
-    phase_two_temperature: 0.1       # Temperature for Phase 2 detailed selection
-    fallback_enabled: true           # Enable fallback mechanisms
-    retry_attempts: 3                # Number of retry attempts for each phase
-  error_handling:
-    enable_fallbacks: true           # Enable comprehensive fallback mechanisms
-    max_retry_attempts: 3            # Maximum retry attempts for AI requests
-    fallback_models:                 # Alternative models to try if primary fails
-      - "anthropic.claude-3-haiku-20240307-v1:0"
-      - "amazon.nova-lite-v1:0"
-      - "anthropic.claude-instant-v1"
-    emergency_selection: true        # Enable emergency rule-based selection as last resort
-
+    enabled: true
+    fallback_enabled: true
+    phase_one_candidates: 150
+    phase_one_max_tokens: 2000
+    phase_one_temperature: 0.1
+    phase_two_max_tokens: 4000
+    phase_two_temperature: 0.1
+    retry_attempts: 3
 catalog:
   index_file: ./policy-catalog/policy-index.json
   local_storage: ./policy-catalog
   repositories:
   - branch: main
     url: https://github.com/kyverno/policies
-
 cluster:
-  context: kind-kind-wsl
+  context: 'null'
   kubeconfig_path: ~/.kube/config
   timeout: 60
-
 logging:
   file: ./aegis.log
   level: INFO
-
 output:
   directory: ./recommended-policies
   dynamic_categories: true
   include_tests: false
   validate_policies: false
-
 questionnaire:
   total_questions: 20

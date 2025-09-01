@@ -56,6 +56,7 @@ class ClusterAnalyzer(LoggerMixin):
                 "gloo",
                 "istio-gateway",
                 "envoy-gateway",
+                "aws-load-balancer-controller",
             ],
             "networking": [
                 "cilium",
@@ -116,7 +117,6 @@ class ClusterAnalyzer(LoggerMixin):
             "eks": [
                 "aws-node",
                 "aws-load-balancer-controller",
-                "cluster-autoscaler",
                 "ebs-csi-driver",
                 "efs-csi-driver",
             ],
@@ -124,14 +124,12 @@ class ClusterAnalyzer(LoggerMixin):
                 "azure-cni",
                 "azure-disk-csi-driver",
                 "azure-file-csi-driver",
-                "cluster-autoscaler",
                 "oms-agent",
             ],
             "gke": [
                 "gke-node-pool",
                 "gce-pd-csi-driver",
                 "gcp-compute-persistent-disk-csi-driver",
-                "cluster-autoscaler",
                 "fluentd-gcp",
             ],
         }

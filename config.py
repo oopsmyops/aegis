@@ -138,7 +138,7 @@ class ConfigurationManager(ConfigurationInterface):
                 ],
             },
             "cluster": {
-                "context": "kind-kind-wsl",
+                "context": "null",
                 "kubeconfig_path": "~/.kube/config",
                 "timeout": 60,
             },

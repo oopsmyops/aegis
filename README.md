@@ -61,7 +61,7 @@ sudo mv kyverno /usr/local/bin/
 
 ```bash
 # Create default configuration file
-python main.py config --init
+aegis config --init
 
 # Edit configuration as needed
 nano aegis-config.yaml
@@ -71,26 +71,26 @@ nano aegis-config.yaml
 
 ```bash
 # Execute all steps in sequence
-python main.py run --all
+aegis run --all
 ```
 
 ### 3. Or Run Individual Commands
 
 ```bash
 # Step 1: Discover cluster information
-python main.py discover --output cluster-discovery.yaml
+aegis discover --output cluster-discovery.yaml
 
 # Step 2: Gather governance requirements
-python main.py questionnaire --input cluster-discovery.yaml
+aegis questionnaire --input cluster-discovery.yaml
 
 # Step 3: Build policy catalog (one-time setup)
-python main.py catalog --repos https://github.com/kyverno/policies
+aegis catalog --repos https://github.com/kyverno/policies
 
 # Step 4: Get AI policy recommendations
-python main.py recommend --input cluster-discovery.yaml --output ./recommended-policies
+aegis recommend --input cluster-discovery.yaml --output ./recommended-policies
 
 # Step 5: Validate policies (optional)
-python main.py validate --directory ./recommended-policies --fix
+aegis validate --directory ./recommended-policies --fix
 ```
 
 ## ⚙️ Configuration
@@ -106,7 +106,7 @@ AEGIS uses YAML configuration files. Configuration is loaded from:
 # Cluster connection settings
 cluster:
   kubeconfig_path: ~/.kube/config
-  context: my-cluster-context
+  context: <my-cluster-context>
   timeout: 60
 
 # Questionnaire settings
@@ -170,13 +170,13 @@ Automatically discover comprehensive cluster information:
 
 ```bash
 # Basic discovery
-python main.py discover
+aegis discover
 
 # Specify output file and cluster context
-python main.py discover --output my-cluster.yaml --context production-cluster
+aegis discover --output my-cluster.yaml --context production-cluster
 
 # Discovery with custom timeout
-python main.py discover --timeout 120
+aegis discover --timeout 120
 ```
 
 **Discovery Output Includes:**
@@ -192,10 +192,10 @@ Gather governance requirements through targeted questions:
 
 ```bash
 # Run interactive questionnaire
-python main.py questionnaire --input cluster-discovery.yaml
+aegis questionnaire --input cluster-discovery.yaml
 
 # Batch mode with defaults (for automation)
-python main.py questionnaire --input cluster-discovery.yaml --batch
+aegis questionnaire --input cluster-discovery.yaml --batch
 ```
 
 **Questionnaire Features:**
@@ -210,16 +210,16 @@ Build and maintain policy catalogs from GitHub repositories:
 
 ```bash
 # Create catalog from Kyverno policies repository
-python main.py catalog --repos https://github.com/kyverno/policies
+aegis catalog --repos https://github.com/kyverno/policies
 
 # Multiple repositories
-python main.py catalog --repos "https://github.com/kyverno/policies,https://github.com/nirmata/kyverno-policies"
+aegis catalog --repos "https://github.com/kyverno/policies,https://github.com/nirmata/kyverno-policies"
 
 # Refresh existing catalog
-python main.py catalog --repos https://github.com/kyverno/policies --refresh
+aegis catalog --repos https://github.com/kyverno/policies --refresh
 
 # Custom output directory
-python main.py catalog --repos https://github.com/kyverno/policies --output ./my-catalog
+aegis catalog --repos https://github.com/kyverno/policies --output ./my-catalog
 ```
 
 ### AI Policy Recommendation
@@ -228,19 +228,19 @@ Get intelligent policy recommendations using AWS Bedrock:
 
 ```bash
 # Basic recommendation
-python main.py recommend --input cluster-discovery.yaml
+aegis recommend --input cluster-discovery.yaml
 
 # Custom policy count and output
-python main.py recommend --input cluster-discovery.yaml --count 25 --output ./policies
+aegis recommend --input cluster-discovery.yaml --count 25 --output ./policies
 
 # Enable validation and automatic fixing
-python main.py recommend --input cluster-discovery.yaml --fix
+aegis recommend --input cluster-discovery.yaml --fix
 
 # Use specific AI model
-python main.py recommend --input cluster-discovery.yaml --ai-model amazon.nova-pro-v1:0
+aegis recommend --input cluster-discovery.yaml --ai-model amazon.nova-pro-v1:0
 
 # Disable AI (use rule-based selection)
-python main.py recommend --input cluster-discovery.yaml --no-ai
+aegis recommend --input cluster-discovery.yaml --no-ai
 ```
 
 **AI Features:**
@@ -256,13 +256,13 @@ Validate policies using Kyverno CLI:
 
 ```bash
 # Basic validation
-python main.py validate --directory ./recommended-policies
+aegis validate --directory ./recommended-policies
 
 # Validation with automatic fixing
-python main.py validate --directory ./recommended-policies --fix
+aegis validate --directory ./recommended-policies --fix
 
 # Custom policies directory
-python main.py validate --directory ./my-policies
+aegis validate --directory ./my-policies
 ```
 
 **Validation Features:**
@@ -470,7 +470,7 @@ kubectl cluster-info
 kubectl config current-context
 
 # Test with specific context
-python main.py discover --context my-cluster
+aegis discover --context my-cluster
 ```
 
 #### Kyverno CLI Issues

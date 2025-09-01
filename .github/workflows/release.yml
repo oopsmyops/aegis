@@ -192,11 +192,16 @@ jobs:
         echo "VERSION_NUM=${VERSION_NUM}" >> $GITHUB_ENV
         echo "Building version: ${VERSION} (${VERSION_NUM})"
 
-    - name: Update version in setup.py
+    - name: Update version in setup.py and __init__.py
       shell: bash
       run: |
+        # Update setup.py
         sed -i.bak "s/version=\"[^\"]*\"/version=\"${VERSION_NUM}\"/" setup.py
-        echo "Updated version to: ${VERSION_NUM}"
+        echo "Updated setup.py version to: ${VERSION_NUM}"
+        
+        # Update __init__.py
+        sed -i.bak "s/__version__ = \"[^\"]*\"/__version__ = \"${VERSION_NUM}\"/" aegis/__init__.py
+        echo "Updated __init__.py version to: ${VERSION_NUM}"
         
     - name: Set up cross-compilation for ARM64 (Linux only)
       if: matrix.os == 'linux' && matrix.arch == 'arm64'

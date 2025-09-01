@@ -18,7 +18,7 @@ class QuestionnaireRunner:
         self.answers: List[RequirementAnswer] = []
         self.registries: List[str] = []
         self.compliance_frameworks: List[str] = []
-        self.custom_labels: Dict[str, str] = {}
+        self.custom_labels: List[str] = []
 
     def run_questionnaire(self) -> GovernanceRequirements:
         """Execute interactive questionnaire with fixed set of questions."""
@@ -105,8 +105,8 @@ class QuestionnaireRunner:
             elif question.follow_up_type == FollowUpType.CUSTOM_LABELS:
                 follow_up_data = self._ask_custom_labels(question)
 
-            elif question.follow_up_type == FollowUpType.RESOURCE_LIMITS:
-                follow_up_data = self._ask_resource_limits(question)
+            # elif question.follow_up_type == FollowUpType.RESOURCE_LIMITS:
+            #     follow_up_data = self._ask_resource_limits(question)
 
         except Exception as e:
             print(f"Error in follow-up question: {e}")
@@ -201,8 +201,32 @@ class QuestionnaireRunner:
     def _ask_custom_labels(self, question: Question) -> Dict[str, Any]:
         """Ask for custom label requirements."""
         print(f"\n{question.follow_up_prompt}")
-        print("Examples: environment=production, team=backend, cost-center=engineering")
+        print("Examples: environment, team, cost-center")
+        # ================================================================================
+        while True:
+            try:
+                labels_input = input("Labels: ").strip()
 
+                if not labels_input:
+                    print("Please enter at least one label or press Enter to skip.")
+                    skip = input("Skip label configuration? (y/n): ").strip().lower()
+                    if skip in ["y", "yes"]:
+                        return {"custom_labels": []}
+                    continue
+
+                # Parse and validate labels
+                labels = [l.strip() for l in labels_input.split(",") if l.strip()]
+
+                if not labels:
+                    print("No valid labels found. Please try again.")
+                    continue
+
+                self.custom_labels.extend(labels)
+                return {"custom_labels": labels}
+
+            except EOFError:
+                return {"custom_labels": []}
+        # ================================================================================
         try:
             labels_input = input("Labels: ").strip()
 
@@ -232,45 +256,45 @@ class QuestionnaireRunner:
         except EOFError:
             return {"custom_labels": {}}
 
-    def _ask_resource_limits(self, question: Question) -> Dict[str, Any]:
-        """Ask for resource limit specifications."""
-        print(f"\n{question.follow_up_prompt}")
-        print("Examples: cpu=500m, memory=512Mi, storage=1Gi")
-        print("You can specify default, min, and max values for each resource type.")
+    # def _ask_resource_limits(self, question: Question) -> Dict[str, Any]:
+    #     """Ask for resource limit specifications."""
+    #     print(f"\n{question.follow_up_prompt}")
+    #     print("Examples: cpu=500m, memory=512Mi, storage=1Gi")
+    #     print("You can specify default, min, and max values for each resource type.")
 
-        try:
-            limits_input = input("Resource limits: ").strip()
+    #     try:
+    #         limits_input = input("Resource limits: ").strip()
 
-            if not limits_input:
-                print("Please enter resource limits or press Enter to skip.")
-                skip = (
-                    input("Skip resource limits configuration? (y/n): ").strip().lower()
-                )
-                if skip in ["y", "yes"]:
-                    return {"resource_limits": {}}
-                return self._ask_resource_limits(question)  # Ask again
+    #         if not limits_input:
+    #             print("Please enter resource limits or press Enter to skip.")
+    #             skip = (
+    #                 input("Skip resource limits configuration? (y/n): ").strip().lower()
+    #             )
+    #             if skip in ["y", "yes"]:
+    #                 return {"resource_limits": {}}
+    #             return self._ask_resource_limits(question)  # Ask again
 
-            # Parse resource limits
-            limits = {}
-            try:
-                for limit_pair in limits_input.split(","):
-                    limit_pair = limit_pair.strip()
-                    if "=" in limit_pair:
-                        resource, value = limit_pair.split("=", 1)
-                        limits[resource.strip()] = value.strip()
-                    else:
-                        print(
-                            f"Warning: Invalid limit format '{limit_pair}', skipping."
-                        )
+    #         # Parse resource limits
+    #         limits = {}
+    #         try:
+    #             for limit_pair in limits_input.split(","):
+    #                 limit_pair = limit_pair.strip()
+    #                 if "=" in limit_pair:
+    #                     resource, value = limit_pair.split("=", 1)
+    #                     limits[resource.strip()] = value.strip()
+    #                 else:
+    #                     print(
+    #                         f"Warning: Invalid limit format '{limit_pair}', skipping."
+    #                     )
 
-            except Exception as e:
-                print(f"Error parsing resource limits: {e}")
-                return {"resource_limits": {}}
+    #         except Exception as e:
+    #             print(f"Error parsing resource limits: {e}")
+    #             return {"resource_limits": {}}
 
-            return {"resource_limits": limits}
+    #         return {"resource_limits": limits}
 
-        except EOFError:
-            return {"resource_limits": {}}
+    #     except EOFError:
+    #         return {"resource_limits": {}}
 
     def _validate_registry_format(self, registry: str) -> bool:
         """Basic validation for registry format."""

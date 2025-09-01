@@ -192,7 +192,7 @@ class TestYamlUpdater(unittest.TestCase):
             configs = gov_req["configurations"]
             self.assertEqual(configs["allowed_registries"], ["docker.io"])
             self.assertEqual(configs["compliance_frameworks"], ["cis"])
-            self.assertEqual(configs["required_labels"]["env"], "prod")
+            self.assertEqual(configs["custom_labels"]["env"], "prod")
 
         finally:
             # Clean up

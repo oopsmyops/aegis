@@ -149,7 +149,7 @@ class YamlUpdater:
 
         # Add custom labels if any
         if requirements.custom_labels:
-            configurations["required_labels"] = requirements.custom_labels
+            configurations["custom_labels"] = requirements.custom_labels
 
         return configurations
 

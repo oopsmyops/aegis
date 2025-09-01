@@ -1575,15 +1575,52 @@ def config(ctx: click.Context, init: bool):
 @cli.command()
 def version():
     """Show AEGIS version information."""
+    version_str = "0.1.0"
+    description_str = "AI-powered Kubernetes governance policy recommendation tool"
+
     try:
+        # Try to get version from git tag first
+        import subprocess
+
+        # Get the directory where the git repo is (parent of cli directory)
+        git_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        result = subprocess.run(
+            ["git", "describe", "--tags", "--exact-match"],
+            capture_output=True,
+            text=True,
+            cwd=git_dir,
+        )
+        if result.returncode == 0:
+            git_version = result.stdout.strip()
+            click.echo(f"AEGIS {git_version}")
+            click.echo(description_str)
+            return
+    except Exception:
+        pass
+
+    try:
+        # Try to import from parent package
         from .. import __version__, __description__
 
-        click.echo(f"AEGIS v{__version__}")
-        click.echo(__description__)
+        version_str = __version__
+        description_str = __description__
     except ImportError:
-        # Fallback if import fails
-        click.echo("AEGIS v0.1.0")
-        click.echo("AI-powered Kubernetes governance policy recommendation tool")
+        try:
+            # Try direct import from __init__.py
+            import sys
+
+            parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            sys.path.insert(0, parent_dir)
+            import __init__ as aegis_init
+
+            version_str = aegis_init.__version__
+            description_str = aegis_init.__description__
+        except Exception:
+            # Use defaults
+            pass
+
+    click.echo(f"AEGIS v{version_str}")
+    click.echo(description_str)
 
 
 @cli.command()
@@ -1771,13 +1808,6 @@ def health(ctx: click.Context):
 
     if not health_status:
         sys.exit(1)
-
-
-@cli.command()
-def version():
-    """Show AEGIS version information."""
-    click.echo("AEGIS CLI v1.0.0")
-    click.echo("AI Enabled Governance Insights & Suggestions for Kubernetes")
 
 
 def main():

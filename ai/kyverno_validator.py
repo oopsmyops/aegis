@@ -208,6 +208,9 @@ class KyvernoValidator(PolicyValidatorInterface):
             result.passed = policy_cli_result.get("passed", False)
             result.errors.extend(policy_cli_result.get("errors", []))
             result.warnings.extend(policy_cli_result.get("warnings", []))
+            self.logger.info(
+                f"Policy {policy_name}: passed={result.passed}, errors={len(result.errors)}"
+            )
 
             # Merge CLI results into test_results
             result.test_results.update(policy_cli_result)
@@ -221,7 +224,20 @@ class KyvernoValidator(PolicyValidatorInterface):
                 result = self._fix_test_file_errors(
                     result, policy, policy_dir, cli_report["test_errors"]
                 )
+
+            # Handle test failures (when tests run but fail validation) if AI fixes are enabled
+            if self.enable_ai_fixes and not result.passed and result.errors:
+                self.logger.info(
+                    f"Attempting to fix test failures for {result.policy_name}: passed={result.passed}, errors={len(result.errors)}"
+                )
+                result = self._fix_test_failures(result, policy, policy_dir, cli_report)
+            elif self.enable_ai_fixes:
+                self.logger.info(
+                    f"Skipping test failure fix for {result.policy_name}: passed={result.passed}, errors={len(result.errors)}, ai_fixes={self.enable_ai_fixes}"
+                )
+
         else:
+            self.logger.info(f"Policy {policy_name}: No CLI result found")
             # No policy-specific CLI results available, but check if this policy failed in the global JSON
             if cli_report.get("json_output") and isinstance(
                 cli_report["json_output"], list
@@ -716,6 +732,230 @@ class KyvernoValidator(PolicyValidatorInterface):
         except Exception as e:
             self.logger.error(f"Error generating validation report: {e}")
             raise ValidationError(f"Failed to generate validation report: {e}")
+
+    def _fix_test_failures(
+        self,
+        result: ValidationResult,
+        policy: RecommendedPolicy,
+        policy_dir: str,
+        cli_report: Dict[str, Any],
+    ) -> ValidationResult:
+        """Fix test failures (when tests run but fail validation) using AI."""
+        if not self.bedrock_client or not result.errors:
+            return result
+
+        self.logger.info(f"Fixing test failures for {result.policy_name}")
+
+        try:
+            # Check if this policy has actual test failures in the CLI report
+            policy_failures = []
+            if cli_report.get("json_output") and isinstance(
+                cli_report["json_output"], list
+            ):
+                for failure in cli_report["json_output"]:
+                    if (
+                        isinstance(failure, dict)
+                        and failure.get("POLICY") == result.policy_name
+                    ):
+                        policy_failures.append(failure)
+
+            if not policy_failures:
+                # No specific failures found in JSON, but we have errors - try to fix anyway
+                self.logger.info(
+                    f"No specific failures found for {result.policy_name}, attempting general fix"
+                )
+
+            # Read current test and policy files
+            test_file_path = os.path.join(policy_dir, "kyverno-test.yaml")
+            policy_file_path = os.path.join(policy_dir, f"{result.policy_name}.yaml")
+            resource_file_path = os.path.join(policy_dir, "resource.yaml")
+
+            if not os.path.exists(test_file_path):
+                self.logger.warning(f"Test file not found: {test_file_path}")
+                return result
+
+            if not os.path.exists(policy_file_path):
+                self.logger.warning(f"Policy file not found: {policy_file_path}")
+                return result
+
+            # Read current files
+            with open(test_file_path, "r", encoding="utf-8") as f:
+                current_test = f.read()
+
+            with open(policy_file_path, "r", encoding="utf-8") as f:
+                policy_content = f.read()
+
+            resource_content = ""
+            if os.path.exists(resource_file_path):
+                with open(resource_file_path, "r", encoding="utf-8") as f:
+                    resource_content = f.read()
+
+            # Create backup
+            backup_path = test_file_path + ".backup"
+            with open(backup_path, "w", encoding="utf-8") as f:
+                f.write(current_test)
+
+            # Fix the test failures using AI
+            fixed_content = self._fix_failing_tests_with_ai(
+                test_file_path,
+                result.errors,
+                policy_failures,
+                policy_content,
+                current_test,
+                resource_content,
+            )
+
+            if fixed_content and fixed_content != current_test:
+                # Validate the fixed content is valid YAML
+                try:
+                    import yaml
+
+                    yaml.safe_load(fixed_content)
+
+                    # Write the fixed content
+                    with open(test_file_path, "w", encoding="utf-8") as f:
+                        f.write(fixed_content)
+
+                    result.fixed_content = "AI fixes applied to failing test cases"
+                    result.warnings.append(
+                        f"Fixed test failures: {len(policy_failures)} specific failures addressed"
+                    )
+                    self.logger.info(
+                        f"Successfully fixed test failures for {result.policy_name}"
+                    )
+
+                    # Remove backup since fix was successful
+                    if os.path.exists(backup_path):
+                        os.remove(backup_path)
+
+                except yaml.YAMLError as e:
+                    self.logger.warning(f"AI-generated fix has invalid YAML: {e}")
+                    # Restore from backup
+                    if os.path.exists(backup_path):
+                        with open(backup_path, "r", encoding="utf-8") as f:
+                            backup_content = f.read()
+                        with open(test_file_path, "w", encoding="utf-8") as f:
+                            f.write(backup_content)
+                        os.remove(backup_path)
+                    result.warnings.append(
+                        f"Test failure fix failed: Invalid YAML generated"
+                    )
+            else:
+                # Remove backup since no changes were made
+                if os.path.exists(backup_path):
+                    os.remove(backup_path)
+
+        except Exception as e:
+            self.logger.error(
+                f"Error fixing test failures for {result.policy_name}: {e}"
+            )
+            result.warnings.append(f"Test failure fix failed: {e}")
+            # Restore from backup if it exists
+            backup_path = os.path.join(policy_dir, "kyverno-test.yaml.backup")
+            if os.path.exists(backup_path):
+                try:
+                    with open(backup_path, "r", encoding="utf-8") as f:
+                        backup_content = f.read()
+                    with open(
+                        os.path.join(policy_dir, "kyverno-test.yaml"),
+                        "w",
+                        encoding="utf-8",
+                    ) as f:
+                        f.write(backup_content)
+                    os.remove(backup_path)
+                except Exception as restore_error:
+                    self.logger.error(f"Failed to restore backup: {restore_error}")
+
+        return result
+
+    def _fix_failing_tests_with_ai(
+        self,
+        test_file_path: str,
+        errors: List[str],
+        policy_failures: List[Dict[str, Any]],
+        policy_content: str,
+        current_test: str,
+        resource_content: str,
+    ) -> Optional[str]:
+        """Use AI to fix failing test cases (not parsing errors, but actual test failures)."""
+        if not self.bedrock_client:
+            return None
+
+        try:
+            # Format failure information for the AI
+            failure_details = []
+            for failure in policy_failures:
+                failure_info = f"- Policy: {failure.get('POLICY', 'unknown')}"
+                failure_info += f", Rule: {failure.get('RULE', 'unknown')}"
+                failure_info += f", Resource: {failure.get('RESOURCE', 'unknown')}"
+                failure_info += f", Reason: {failure.get('REASON', 'unknown')}"
+                failure_details.append(failure_info)
+
+            error_summary = "\n".join(errors) if errors else "Test validation failed"
+            failures_summary = (
+                "\n".join(failure_details)
+                if failure_details
+                else "No specific failure details available"
+            )
+
+            prompt = f"""
+You are a Kyverno testing expert. Fix the failing test cases based on the validation failures.
+
+POLICY CONTENT:
+```yaml
+{policy_content}
+```
+
+CURRENT TEST FILE:
+```yaml
+{current_test}
+```
+
+CURRENT RESOURCE FILE:
+```yaml
+{resource_content}
+```
+
+VALIDATION ERRORS:
+{error_summary}
+
+SPECIFIC TEST FAILURES:
+{failures_summary}
+
+INSTRUCTIONS:
+1. Analyze why the tests are failing based on the error information
+2. Fix the test expectations to match what the policy actually validates
+3. Ensure test resource names match between test file and resource file
+4. Fix any field name issues (e.g., 'resource' vs 'resources')
+5. Ensure the test results (pass/fail) match the actual policy behavior
+6. Keep the same test structure but fix the failing assertions
+7. For CEL policies, ensure proper namespace context
+8. Return only the corrected YAML test content
+
+CORRECTED TEST FILE:
+"""
+
+            response = self.bedrock_client.send_request(
+                prompt, max_tokens=4000, temperature=0.1
+            )
+
+            if response and response.strip():
+                # Clean up the response (remove markdown code blocks if present)
+                cleaned_response = response.strip()
+                if cleaned_response.startswith("```yaml"):
+                    cleaned_response = cleaned_response[7:]
+                if cleaned_response.startswith("```"):
+                    cleaned_response = cleaned_response[3:]
+                if cleaned_response.endswith("```"):
+                    cleaned_response = cleaned_response[:-3]
+
+                return cleaned_response.strip()
+
+        except Exception as e:
+            self.logger.error(f"Error generating AI fix for failing tests: {e}")
+            return None
+
+        return None
 
     def _analyze_validation_errors(
         self, errors: List[str], policy_content: str
@@ -1415,7 +1655,8 @@ TEST RESOURCES:
                     "kyverno_json": json_output,
                 }
 
-                # JSON output is a list of test failure objects
+            # JSON output is a list of test failure objects
+            if isinstance(json_output, (list, dict)):
                 test_results = (
                     json_output if isinstance(json_output, list) else [json_output]
                 )
